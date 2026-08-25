@@ -1,0 +1,555 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000090 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000094 /* Markdown */; };
+		100000000000000000000091 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000095 /* SwiftSoup */; };
+		1000000000000000000000A0 /* Web in Resources */ = {isa = PBXBuildFile; fileRef = 1000000000000000000000A2 /* Web */; };
+		1000000000000000000000A1 /* ThirdParty in Resources */ = {isa = PBXBuildFile; fileRef = 1000000000000000000000A3 /* ThirdParty */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000080 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000001;
+			remoteInfo = MarkLook;
+		};
+		100000000000000000000081 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000001;
+			remoteInfo = MarkLook;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000030 /* MarkLook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MarkLook.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000031 /* MarkLookTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MarkLookTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000032 /* MarkLookUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MarkLookUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000050 /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Project.xcconfig; sourceTree = "<group>"; };
+		100000000000000000000051 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		100000000000000000000052 /* Tests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Tests.xcconfig; sourceTree = "<group>"; };
+		100000000000000000000053 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000054 /* MarkLook.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MarkLook.entitlements; sourceTree = "<group>"; };
+		1000000000000000000000A2 /* Web */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Web; path = MarkLook/Resources/Web; sourceTree = SOURCE_ROOT; };
+		1000000000000000000000A3 /* ThirdParty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ThirdParty; path = MarkLook/Resources/ThirdParty; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1000000000000000000000A5 /* Exceptions for MarkLook folder in MarkLook target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Resources/ThirdParty/HighlightJS/HIGHLIGHTJS_ASSETS.md,
+				Resources/ThirdParty/HighlightJS/HIGHLIGHTJS_LICENSE.txt,
+				Resources/ThirdParty/HighlightJS/github-dark.min.css,
+				Resources/ThirdParty/HighlightJS/github.min.css,
+				Resources/ThirdParty/HighlightJS/highlight.min.js,
+				Resources/ThirdParty/KaTeX/KATEX_ASSETS.md,
+				Resources/ThirdParty/KaTeX/KATEX_LICENSE.txt,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_AMS-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_AMS-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_AMS-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Bold.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Bold.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Bold.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Caligraphic-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Bold.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Bold.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Bold.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Fraktur-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Bold.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Bold.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Bold.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-BoldItalic.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-BoldItalic.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-BoldItalic.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Italic.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Italic.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Italic.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Main-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-BoldItalic.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-BoldItalic.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-BoldItalic.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-Italic.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-Italic.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Math-Italic.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Bold.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Bold.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Bold.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Italic.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Italic.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Italic.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_SansSerif-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Script-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Script-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Script-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size1-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size1-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size1-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size2-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size2-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size2-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size3-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size3-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size3-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size4-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size4-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Size4-Regular.woff2,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Typewriter-Regular.ttf,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Typewriter-Regular.woff,
+				Resources/ThirdParty/KaTeX/fonts/KaTeX_Typewriter-Regular.woff2,
+				Resources/ThirdParty/KaTeX/katex.min.css,
+				Resources/ThirdParty/KaTeX/katex.min.js,
+				Resources/Web/Viewer.css,
+				Resources/Web/ViewerRuntime.js,
+			);
+			target = 100000000000000000000001 /* MarkLook */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		100000000000000000000023 /* MarkLook */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1000000000000000000000A5 /* Exceptions for MarkLook folder in MarkLook target */,
+			);
+			path = MarkLook;
+			sourceTree = "<group>";
+		};
+		100000000000000000000024 /* MarkLookTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MarkLookTests;
+			sourceTree = "<group>";
+		};
+		100000000000000000000025 /* MarkLookUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MarkLookUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000090 /* Markdown in Frameworks */,
+				100000000000000000000091 /* SwiftSoup in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000044 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000047 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000020 = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000023 /* MarkLook */,
+				100000000000000000000024 /* MarkLookTests */,
+				100000000000000000000025 /* MarkLookUITests */,
+				1000000000000000000000A4 /* Bundled Resources */,
+				100000000000000000000022 /* Config */,
+				100000000000000000000021 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000021 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000030 /* MarkLook.app */,
+				100000000000000000000031 /* MarkLookTests.xctest */,
+				100000000000000000000032 /* MarkLookUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000022 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000050 /* Project.xcconfig */,
+				100000000000000000000051 /* App.xcconfig */,
+				100000000000000000000052 /* Tests.xcconfig */,
+				100000000000000000000053 /* Info.plist */,
+				100000000000000000000054 /* MarkLook.entitlements */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		1000000000000000000000A4 /* Bundled Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1000000000000000000000A2 /* Web */,
+				1000000000000000000000A3 /* ThirdParty */,
+			);
+			name = "Bundled Resources";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000001 /* MarkLook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000061 /* Build configuration list for PBXNativeTarget "MarkLook" */;
+			buildPhases = (
+				100000000000000000000040 /* Sources */,
+				100000000000000000000041 /* Frameworks */,
+				100000000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				100000000000000000000023 /* MarkLook */,
+			);
+			name = MarkLook;
+			packageProductDependencies = (
+				100000000000000000000094 /* Markdown */,
+				100000000000000000000095 /* SwiftSoup */,
+			);
+			productName = MarkLook;
+			productReference = 100000000000000000000030 /* MarkLook.app */;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000002 /* MarkLookTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000062 /* Build configuration list for PBXNativeTarget "MarkLookTests" */;
+			buildPhases = (
+				100000000000000000000043 /* Sources */,
+				100000000000000000000044 /* Frameworks */,
+				100000000000000000000045 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000082 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				100000000000000000000024 /* MarkLookTests */,
+			);
+			name = MarkLookTests;
+			packageProductDependencies = (
+			);
+			productName = MarkLookTests;
+			productReference = 100000000000000000000031 /* MarkLookTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		100000000000000000000003 /* MarkLookUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000063 /* Build configuration list for PBXNativeTarget "MarkLookUITests" */;
+			buildPhases = (
+				100000000000000000000046 /* Sources */,
+				100000000000000000000047 /* Frameworks */,
+				100000000000000000000048 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000083 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				100000000000000000000025 /* MarkLookUITests */,
+			);
+			name = MarkLookUITests;
+			packageProductDependencies = (
+			);
+			productName = MarkLookUITests;
+			productReference = 100000000000000000000032 /* MarkLookUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000010 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					100000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					100000000000000000000002 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 100000000000000000000001;
+					};
+					100000000000000000000003 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 100000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000060 /* Build configuration list for PBXProject "MarkLook" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000020;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 100000000000000000000021 /* Products */;
+			packageReferences = (
+				100000000000000000000092 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				100000000000000000000093 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000001 /* MarkLook */,
+				100000000000000000000002 /* MarkLookTests */,
+				100000000000000000000003 /* MarkLookUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1000000000000000000000A0 /* Web in Resources */,
+				1000000000000000000000A1 /* ThirdParty in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000045 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000048 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000040 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000043 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000046 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000082 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000001 /* MarkLook */;
+			targetProxy = 100000000000000000000080 /* PBXContainerItemProxy */;
+		};
+		100000000000000000000083 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000001 /* MarkLook */;
+			targetProxy = 100000000000000000000081 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000050 /* Project.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		100000000000000000000071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000050 /* Project.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		100000000000000000000072 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000051 /* App.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+			};
+			name = Debug;
+		};
+		100000000000000000000073 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000051 /* App.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+			};
+			name = Release;
+		};
+		100000000000000000000074 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000052 /* Tests.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.MarkLookTests;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MarkLook.app/Contents/MacOS/MarkLook";
+			};
+			name = Debug;
+		};
+		100000000000000000000075 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000052 /* Tests.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.MarkLookTests;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MarkLook.app/Contents/MacOS/MarkLook";
+			};
+			name = Release;
+		};
+		100000000000000000000076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000052 /* Tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.MarkLookUITests;
+				TEST_TARGET_NAME = MarkLook;
+			};
+			name = Debug;
+		};
+		100000000000000000000077 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 100000000000000000000052 /* Tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.MarkLookUITests;
+				TEST_TARGET_NAME = MarkLook;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		100000000000000000000092 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.8.0;
+			};
+		};
+		100000000000000000000093 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.11.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		100000000000000000000094 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 100000000000000000000092 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
+		};
+		100000000000000000000095 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 100000000000000000000093 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000060 /* Build configuration list for PBXProject "MarkLook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000070 /* Debug */,
+				100000000000000000000071 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000061 /* Build configuration list for PBXNativeTarget "MarkLook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000072 /* Debug */,
+				100000000000000000000073 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000062 /* Build configuration list for PBXNativeTarget "MarkLookTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000074 /* Debug */,
+				100000000000000000000075 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000063 /* Build configuration list for PBXNativeTarget "MarkLookUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000076 /* Debug */,
+				100000000000000000000077 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 100000000000000000000010 /* Project object */;
+}
