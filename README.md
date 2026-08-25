@@ -1,25 +1,73 @@
 # MarkLook
 
-MarkLook は、macOS 14 以降でローカルの Markdown／HTML を安全に閲覧するための読み取り専用ビューアです。v1 の名称、Bundle ID、アイコン、配布方法は仮設定です。
+**保存しても、読みかけの場所はそのまま。**
 
-## 対応環境
+MarkLookは、ローカルのMarkdownとHTMLに特化したmacOS用の読み取り専用ビューアです。
+エディタでファイルを保存すると、白いフラッシュやページ先頭への巻き戻りを起こさず、表示だけを更新します。
 
-- macOS 14 以降
-- Apple Silicon（arm64）のみ
-- Xcode 26 以降
+> macOS 14以降 / Apple Silicon / ローカルファイル専用
+
+## 特長
+
+- **スクロール位置を保った自動更新** — 見出しや段落を基準に、読んでいた位置を維持したまま変更を反映します。通常保存とatomic saveの両方に対応しています。
+
+- **読むことに専念できる表示** — GFM、脚注、数式、タスクリスト、表、ローカル画像、コードハイライトに対応。ライト／ダークモードにも追従します。
+
+- **ローカルで完結** — 文書や依存素材を外部へ送信しません。HTMLは静的DOMとしてサニタイズし、文書に含まれるJavaScriptやリモート資源を実行・取得しません。
+
+- **macOSらしいファイル操作** — Finder、`⌘O`、ドラッグ＆ドロップ、Open Recentから開けます。標準のウィンドウタブ、検索、ズーム、印刷にも対応しています。
+
+- **読みやすい本文幅** — Settingsから本文の最大幅を変更でき、ウィンドウ全幅表示にも切り替えられます。
+
+## 対応形式
+
+| 形式 | 拡張子 | 主な対応内容 |
+| --- | --- | --- |
+| Markdown | `.md`, `.markdown` | GFM、脚注、インライン／ブロック数式、安全な生HTML |
+| HTML | `.html`, `.htm` | インラインCSS、許可されたローカルCSSと画像 |
+
+リンク先のHTTP(S) URLはアプリ内で読み込まず、クリックしたときだけ既定のブラウザへ渡します。
+
+## ショートカット
+
+| 操作 | キー |
+| --- | --- |
+| ファイルを開く | `⌘O` |
+| 新しいタブ | `⌘T` |
+| 再読み込み | `⌘R` |
+| 本文検索 | `⌘F` |
+| ズームイン／アウト／リセット | `⌘+` / `⌘-` / `⌘0` |
+| 戻る／進む | `⌘[` / `⌘]` |
+| 印刷 | `⌘P` |
 
 ## ビルド
 
+必要なもの：
+
+- macOS 14以降
+- Apple Silicon Mac
+- Xcode 26以降
+
 ```sh
+git clone https://github.com/kdmsnr/marklook.git
+cd marklook
+
 xcodebuild \
   -project MarkLook.xcodeproj \
   -scheme MarkLook \
   -configuration Release \
   -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData \
   build
 ```
 
-Xcode からは `MarkLook.xcodeproj` を開き、`MarkLook` scheme を選択します。開発用のビルド・起動・ログ確認には `script/build_and_run.sh` も使えます。
+ビルドされたアプリは次の場所に生成されます。
+
+```text
+.build/DerivedData/Build/Products/Release/MarkLook.app
+```
+
+Xcodeで開発する場合は`MarkLook.xcodeproj`を開き、`MarkLook` schemeを選択してください。
 
 ## テスト
 
@@ -32,20 +80,18 @@ xcodebuild \
   test
 ```
 
-Release 構成のリロード・ベンチマークは次で実行します。
+Release構成のリロードベンチマーク：
 
 ```sh
 ./script/run_reload_benchmarks.sh
 ```
 
-## セキュリティ設計
+## プライバシーと安全性
 
-- App Sandbox と security-scoped bookmark で、ユーザーが選択したファイル／フォルダだけを読み取ります。
-- `WKWebView` の補助プロセスを起動するため、App Sandbox のネットワーククライアント権限を有効にしています。文書からの外部通信を許可するものではありません。
-- 文書の JavaScript は無効です。アプリ管理の DOM 更新コードだけを隔離された `WKContentWorld` で実行します。
-- HTML は同梱サニタイザーを通し、実行要素、イベント属性、フォーム、リモート資源を除去します。
-- ローカル依存素材は `mark-resource:` scheme から配信し、正規化後の実パスを許可範囲と照合します。
-- WebView は非永続データストアと厳格な CSP を使用し、HTTP(S) をアプリ内では読み込みません。
-- 文書内容、テレメトリ、分析履歴は永続化しません。
+MarkLookはApp Sandbox内で動作し、ユーザーが選択したファイルと許可したフォルダだけを読み取ります。ローカル依存素材は専用スキーム経由で配信し、正規化後の実パスを許可範囲と照合します。WebViewは非永続データストアを使用し、文書内容、テレメトリ、分析履歴を保存・送信しません。
 
-同梱ライブラリとライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
+同梱ライブラリとライセンスは[Third-Party Notices](THIRD_PARTY_NOTICES.md)を参照してください。
+
+## License
+
+[MIT](LICENSE) © 2026 Masanori Kado
