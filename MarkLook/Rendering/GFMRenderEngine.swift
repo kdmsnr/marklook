@@ -54,6 +54,7 @@ actor GFMRenderEngine: RenderEngine {
             formatted = SecureHTMLFormatter.Output(
                 html: SecureHTMLFormatter.format(
                     document,
+                    lineBreakMode: context.markdownLineBreakMode,
                     estimatedSourceByteCount: estimatedSourceByteCount
                 ),
                 resources: [],
@@ -94,7 +95,10 @@ actor GFMRenderEngine: RenderEngine {
                 let safeID = anchorID(footnote.id)
                 let content: String
                 if requiresFullSanitization {
-                    content = SecureHTMLFormatter.format(footnoteDocument)
+                    content = SecureHTMLFormatter.format(
+                        footnoteDocument,
+                        lineBreakMode: context.markdownLineBreakMode
+                    )
                 } else {
                     let formattedFootnote = SecureHTMLFormatter.format(
                         footnoteDocument,

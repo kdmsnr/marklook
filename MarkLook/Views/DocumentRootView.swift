@@ -8,6 +8,8 @@ struct DocumentRootView: View {
     private var configuredContentWidth = ViewerLayoutPreferences.defaultContentWidth
     @AppStorage(ViewerLayoutPreferences.usesFullWidthKey)
     private var usesFullContentWidth = false
+    @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
+    private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
     @State private var session: DocumentSession
     @State private var warningsArePresented = false
 
@@ -69,10 +71,14 @@ struct DocumentRootView: View {
                 value: WelcomeWindowIdentity.initialValue
             )
             session.setContentWidth(effectiveContentWidth)
+            session.setMarkdownLineBreakMode(markdownLineBreakMode)
             session.start()
         }
         .onChange(of: effectiveContentWidth) { _, width in
             session.setContentWidth(width)
+        }
+        .onChange(of: markdownLineBreakMode) { _, mode in
+            session.setMarkdownLineBreakMode(mode)
         }
         .onDisappear { session.persistViewState() }
         .onChange(of: scenePhase) { _, phase in
@@ -152,6 +158,10 @@ struct DocumentRootView: View {
             configuredWidth: configuredContentWidth,
             usesFullWidth: usesFullContentWidth
         )
+    }
+
+    private var markdownLineBreakMode: MarkdownLineBreakMode {
+        MarkdownRenderingPreferences.lineBreakMode(storedValue: storedMarkdownLineBreakMode)
     }
 
     private var uiTestControls: some View {

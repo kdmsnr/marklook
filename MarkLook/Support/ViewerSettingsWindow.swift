@@ -18,18 +18,19 @@ enum ViewerSettingsWindow {
     private static func makeWindowController() -> NSWindowController {
         let hostingController = NSHostingController(rootView: ViewerSettingsView())
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 230),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 360),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.contentViewController = hostingController
         window.title = "Settings"
+        window.contentMinSize = NSSize(width: 500, height: 360)
         window.isReleasedWhenClosed = false
         window.isExcludedFromWindowsMenu = true
         window.tabbingMode = .disallowed
         window.collectionBehavior.insert(.moveToActiveSpace)
-        window.setFrameAutosaveName("MarkLook.ViewerSettingsWindow")
+        window.setFrameAutosaveName("MarkLook.ViewerSettingsWindow.v2")
         window.center()
         return NSWindowController(window: window)
     }

@@ -7,6 +7,9 @@ struct ViewerSettingsView: View {
     @AppStorage(ViewerLayoutPreferences.usesFullWidthKey)
     private var usesFullWidth = false
 
+    @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
+    private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
+
     var body: some View {
         Form {
             Section("Reading") {
@@ -37,17 +40,32 @@ struct ViewerSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("Markdown") {
+                Picker("Soft Breaks", selection: markdownLineBreakModeBinding) {
+                    Text("GFM Soft Breaks").tag(MarkdownLineBreakMode.gfmSoftBreaks)
+                    Text("Show Every Newline").tag(MarkdownLineBreakMode.preserveSingleNewlines)
+                }
+                .pickerStyle(.radioGroup)
+
+                Text(markdownLineBreakModeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button("Restore Default") {
                 configuredWidth = ViewerLayoutPreferences.defaultContentWidth
                 usesFullWidth = false
+                storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
             }
             .disabled(
                 !usesFullWidth
                     && normalizedWidth == ViewerLayoutPreferences.defaultContentWidth
+                    && storedMarkdownLineBreakMode == MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
             )
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 230)
+        .frame(width: 500, height: 360)
     }
 
     private var normalizedWidth: Double {
@@ -63,5 +81,25 @@ struct ViewerSettingsView: View {
             get: { normalizedWidth },
             set: { configuredWidth = ViewerLayoutPreferences.normalizedContentWidth($0) }
         )
+    }
+
+    private var markdownLineBreakMode: MarkdownLineBreakMode {
+        MarkdownRenderingPreferences.lineBreakMode(storedValue: storedMarkdownLineBreakMode)
+    }
+
+    private var markdownLineBreakModeBinding: Binding<MarkdownLineBreakMode> {
+        Binding(
+            get: { markdownLineBreakMode },
+            set: { storedMarkdownLineBreakMode = $0.rawValue }
+        )
+    }
+
+    private var markdownLineBreakModeDescription: String {
+        switch markdownLineBreakMode {
+        case .gfmSoftBreaks:
+            "A single newline remains a soft break. Use two trailing spaces or a backslash for a visible line break."
+        case .preserveSingleNewlines:
+            "Every soft break is rendered as a visible line break. Other Markdown syntax is unchanged."
+        }
     }
 }

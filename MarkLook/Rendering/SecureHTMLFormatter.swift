@@ -20,17 +20,30 @@ struct SecureHTMLFormatter: MarkupWalker {
     private var anchorOccurrences: [String: Int] = [:]
     private var headingAnchorBaseCache: [String: String] = [:]
     private let context: RenderContext?
+    private let lineBreakMode: MarkdownLineBreakMode
     private let sanitizer = HTMLSanitizer()
 
-    init(context: RenderContext? = nil, estimatedSourceByteCount: Int = 0) {
+    init(
+        context: RenderContext? = nil,
+        lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        estimatedSourceByteCount: Int = 0
+    ) {
         self.context = context
+        self.lineBreakMode = lineBreakMode
         if estimatedSourceByteCount > 0 {
             result.reserveCapacity(estimatedSourceByteCount.multipliedReportingOverflow(by: 2).partialValue)
         }
     }
 
-    static func format(_ markup: Markup, estimatedSourceByteCount: Int = 0) -> String {
-        var formatter = SecureHTMLFormatter(estimatedSourceByteCount: estimatedSourceByteCount)
+    static func format(
+        _ markup: Markup,
+        lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        estimatedSourceByteCount: Int = 0
+    ) -> String {
+        var formatter = SecureHTMLFormatter(
+            lineBreakMode: lineBreakMode,
+            estimatedSourceByteCount: estimatedSourceByteCount
+        )
         formatter.visit(markup)
         return formatter.result
     }
@@ -42,6 +55,7 @@ struct SecureHTMLFormatter: MarkupWalker {
     ) -> Output {
         var formatter = SecureHTMLFormatter(
             context: context,
+            lineBreakMode: context.markdownLineBreakMode,
             estimatedSourceByteCount: estimatedSourceByteCount
         )
         formatter.visit(markup)
@@ -215,7 +229,12 @@ struct SecureHTMLFormatter: MarkupWalker {
     }
 
     mutating func visitSoftBreak(_: SoftBreak) {
-        result += "\n"
+        switch lineBreakMode {
+        case .gfmSoftBreaks:
+            result += "\n"
+        case .preserveSingleNewlines:
+            result += "<br>\n"
+        }
     }
 
     mutating func visitLink(_ link: Link) {

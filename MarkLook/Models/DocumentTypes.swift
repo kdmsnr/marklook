@@ -87,6 +87,19 @@ struct RenderContext: Sendable {
     let documentURL: URL
     let resourceAuthority: String
     let sizeClass: DocumentSizeClass
+    let markdownLineBreakMode: MarkdownLineBreakMode
+
+    init(
+        documentURL: URL,
+        resourceAuthority: String,
+        sizeClass: DocumentSizeClass,
+        markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks
+    ) {
+        self.documentURL = documentURL
+        self.resourceAuthority = resourceAuthority
+        self.sizeClass = sizeClass
+        self.markdownLineBreakMode = markdownLineBreakMode
+    }
 }
 
 enum DocumentLoadError: LocalizedError, Sendable, Equatable {

@@ -44,12 +44,14 @@ final class DocumentSession {
     @ObservationIgnored private var resourceRevision: UInt64 = 0
     @ObservationIgnored private var presentationGate = ReloadPresentationGate()
     @ObservationIgnored private var monitoringIssue: ViewerIssue?
+    @ObservationIgnored private var markdownLineBreakMode: MarkdownLineBreakMode
 
     init(
         documentURL: URL,
         renderer: any RenderEngine = GFMRenderEngine(),
         bookmarkStore: BookmarkStore = BookmarkStore(),
-        recentDocuments: RecentDocuments = .shared
+        recentDocuments: RecentDocuments = .shared,
+        markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks
     ) {
         let rootURL = Self.normalizedDocumentURL(documentURL)
         let restoredNavigation = Self.persistedNavigation(for: rootURL)
@@ -59,6 +61,7 @@ final class DocumentSession {
         self.renderer = renderer
         self.bookmarkStore = bookmarkStore
         self.recentDocuments = recentDocuments
+        self.markdownLineBreakMode = markdownLineBreakMode
         dependencyTracker = DependencyTracker()
         rootDocumentURL = rootURL
         resourceAuthority = UUID().uuidString.lowercased()
@@ -123,6 +126,14 @@ final class DocumentSession {
 
     func setContentWidth(_ value: Double?) {
         webViewStore.setContentWidth(value)
+    }
+
+    func setMarkdownLineBreakMode(_ mode: MarkdownLineBreakMode) {
+        guard markdownLineBreakMode != mode else { return }
+        markdownLineBreakMode = mode
+        if didStart {
+            configureReloadPipeline()
+        }
     }
 
     func findNext(backwards: Bool = false) {
@@ -226,6 +237,7 @@ final class DocumentSession {
         }
         let renderer = self.renderer
         let contextAuthority = resourceAuthority
+        let markdownLineBreakMode = self.markdownLineBreakMode
         let scheduler = ReloadScheduler<PreparedDocument>(fileURL: url) { input in
             let clock = ContinuousClock()
             let decodeStarted = clock.now
@@ -242,7 +254,8 @@ final class DocumentSession {
                 context: RenderContext(
                     documentURL: input.fileURL,
                     resourceAuthority: contextAuthority,
-                    sizeClass: sizeClass
+                    sizeClass: sizeClass,
+                    markdownLineBreakMode: markdownLineBreakMode
                 )
             )
             let renderDuration = renderStarted.duration(to: clock.now)
