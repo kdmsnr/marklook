@@ -15,10 +15,26 @@ enum WindowTabCoordinator {
     }
 
     static func snapshot() -> Snapshot {
-        Snapshot(
-            parent: NSApp.keyWindow,
-            windowIDs: Set(NSApp.windows.map(ObjectIdentifier.init))
+        let windows = NSApp.windows
+        return Snapshot(
+            parent: preferredParentWindow(
+                keyWindow: NSApp.keyWindow,
+                mainWindow: NSApp.mainWindow,
+                orderedWindows: NSApp.orderedWindows
+            ),
+            windowIDs: Set(windows.map(ObjectIdentifier.init))
         )
+    }
+
+    /// A file panel can still be the key window when its completion handler runs. It must not
+    /// become the parent of a document tab; the underlying main document window is the parent.
+    static func preferredParentWindow(
+        keyWindow: NSWindow?,
+        mainWindow: NSWindow?,
+        orderedWindows: [NSWindow]
+    ) -> NSWindow? {
+        ([keyWindow, mainWindow].compactMap { $0 } + orderedWindows)
+            .first(where: isTabEligible)
     }
 
     static func attachNextWindow(
@@ -27,7 +43,7 @@ enum WindowTabCoordinator {
     ) async {
         for _ in 0 ..< 24 {
             if let newWindow = NSApp.windows.first(where: {
-                !snapshot.windowIDs.contains(ObjectIdentifier($0)) && $0.isVisible
+                !snapshot.windowIDs.contains(ObjectIdentifier($0)) && isTabEligible($0)
             }) {
                 if let parent = snapshot.parent,
                    parent !== newWindow,
@@ -49,5 +65,9 @@ enum WindowTabCoordinator {
         if replacingParent {
             snapshot.parent?.close()
         }
+    }
+
+    private static func isTabEligible(_ window: NSWindow) -> Bool {
+        !(window is NSPanel) && window.tabbingMode != .disallowed
     }
 }

@@ -117,6 +117,8 @@ struct ViewerCommands: Commands {
     }
 
     private func chooseFile() {
+        // Capture the document window before the open panel becomes key.
+        let windowSnapshot = WindowTabCoordinator.snapshot()
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -125,7 +127,7 @@ struct ViewerCommands: Commands {
         panel.prompt = "Open"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            openDocumentURL(url)
+            openDocumentURL(url, windowSnapshot: windowSnapshot)
         }
     }
 
@@ -137,9 +139,10 @@ struct ViewerCommands: Commands {
 
     private func openDocumentURL(
         _ targetURL: URL,
-        bookmarkResolution: BookmarkFileResolution? = nil
+        bookmarkResolution: BookmarkFileResolution? = nil,
+        windowSnapshot: WindowTabCoordinator.Snapshot? = nil
     ) {
-        let snapshot = WindowTabCoordinator.snapshot()
+        let snapshot = windowSnapshot ?? WindowTabCoordinator.snapshot()
         let directLease = bookmarkResolution == nil
             ? SecurityScopedLease(url: targetURL)
             : nil

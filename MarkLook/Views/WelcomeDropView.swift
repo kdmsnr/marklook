@@ -57,6 +57,8 @@ struct WelcomeDropView: View {
     }
 
     private func chooseFile() {
+        // Preserve this tab as the parent before the open panel takes key-window status.
+        let windowSnapshot = WindowTabCoordinator.snapshot()
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -65,7 +67,7 @@ struct WelcomeDropView: View {
         panel.prompt = "Open"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            open(url)
+            open(url, windowSnapshot: windowSnapshot)
         }
     }
 
@@ -75,8 +77,11 @@ struct WelcomeDropView: View {
         return true
     }
 
-    private func open(_ url: URL) {
-        let snapshot = WindowTabCoordinator.snapshot()
+    private func open(
+        _ url: URL,
+        windowSnapshot: WindowTabCoordinator.Snapshot? = nil
+    ) {
+        let snapshot = windowSnapshot ?? WindowTabCoordinator.snapshot()
         Task {
             do {
                 try await openDocument(at: url)
