@@ -9,6 +9,8 @@ enum WelcomeWindowIdentity {
 
 @MainActor
 enum WindowTabCoordinator {
+    static let sharedTabbingIdentifier = "com.example.MarkLook.document-tabs"
+
     struct Snapshot {
         fileprivate let parent: NSWindow?
         fileprivate let windowIDs: Set<ObjectIdentifier>
@@ -35,6 +37,19 @@ enum WindowTabCoordinator {
     ) -> NSWindow? {
         ([keyWindow, mainWindow].compactMap { $0 } + orderedWindows)
             .first(where: isTabEligible)
+    }
+
+    static func configureDraggableTabs(for window: NSWindow) {
+        guard isTabEligible(window) else { return }
+
+        window.tabbingIdentifier = sharedTabbingIdentifier
+        window.tabbingMode = .preferred
+
+        // A single-window group normally hides its tab bar. Keeping it visible gives every
+        // window a draggable tab, so it can be dropped into another MarkLook window.
+        if window.tabGroup?.isTabBarVisible != true {
+            window.toggleTabBar(nil)
+        }
     }
 
     static func attachNextWindow(

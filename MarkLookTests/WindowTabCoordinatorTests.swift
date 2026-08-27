@@ -30,4 +30,16 @@ final class WindowTabCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(parent === documentWindow)
     }
+
+    func testDraggableTabConfigurationUsesSharedIdentity() {
+        let window = NSWindow()
+
+        WindowTabCoordinator.configureDraggableTabs(for: window)
+
+        XCTAssertEqual(
+            window.tabbingIdentifier,
+            WindowTabCoordinator.sharedTabbingIdentifier
+        )
+        XCTAssertEqual(window.tabbingMode, .preferred)
+    }
 }

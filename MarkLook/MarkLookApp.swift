@@ -12,6 +12,7 @@ struct MarkLookApp: App {
             for: UUID.self
         ) { _ in
             WelcomeDropView()
+                .background(WindowTabRegistrationView())
         } defaultValue: {
             WelcomeWindowIdentity.initialValue
         }
@@ -28,12 +29,14 @@ struct MarkLookApp: App {
             if let fileURL = configuration.fileURL {
                 DocumentRootView(documentURL: fileURL)
                     .id(fileURL.standardizedFileURL)
+                    .background(WindowTabRegistrationView())
             } else {
                 ContentUnavailableView(
                     "File Unavailable",
                     systemImage: "doc.badge.ellipsis",
                     description: Text("MarkLook could not determine the document location.")
                 )
+                .background(WindowTabRegistrationView())
             }
         }
         .defaultSize(width: 900, height: 720)
