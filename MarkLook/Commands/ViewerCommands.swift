@@ -25,11 +25,8 @@ extension FocusedValues {
 }
 
 struct ViewerCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.openDocument) private var openDocument
     @FocusedValue(\.viewerActions) private var actions
     let recentDocuments: RecentDocuments
-    let replacingParentOnOpen: Bool
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
@@ -41,9 +38,7 @@ struct ViewerCommands: Commands {
 
         CommandGroup(replacing: .newItem) {
             Button("New Tab") {
-                let snapshot = WindowTabCoordinator.snapshot()
-                openWindow(id: WelcomeWindowIdentity.sceneID, value: UUID())
-                Task { await WindowTabCoordinator.attachNextWindow(after: snapshot) }
+                WindowOpenRouter.shared.openNewTab()
             }
             .keyboardShortcut("t", modifiers: .command)
 
@@ -74,9 +69,15 @@ struct ViewerCommands: Commands {
                 }
                 .disabled(recentDocuments.urls.isEmpty)
             }
+
         }
 
-        CommandGroup(replacing: .saveItem) {}
+        CommandGroup(replacing: .saveItem) {
+            Button("Close Tab") {
+                WindowTabCoordinator.closeSelectedTab()
+            }
+            .keyboardShortcut("w", modifiers: .command)
+        }
 
         CommandMenu("Viewer") {
             Button("Reload") { actions?.reload() }
@@ -117,50 +118,37 @@ struct ViewerCommands: Commands {
     }
 
     private func chooseFile() {
-        // Capture the document window before the open panel becomes key.
-        let windowSnapshot = WindowTabCoordinator.snapshot()
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.markLookMarkdown, .html]
-        panel.prompt = "Open"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            openDocumentURL(url, windowSnapshot: windowSnapshot)
+        let sourceWindow = WindowTabCoordinator.preferredParentWindow()
+        DocumentOpenPanel.chooseFile(attachedTo: sourceWindow) { url in
+            openDocumentURL(url, from: sourceWindow)
         }
     }
 
     private func openRecentDocument(_ recentURL: URL) {
         let bookmarkResolution = BookmarkStore().resolveFile(matching: recentURL)
         let targetURL = bookmarkResolution?.url ?? recentURL
-        openDocumentURL(targetURL, bookmarkResolution: bookmarkResolution)
+        openDocumentURL(
+            targetURL,
+            from: WindowTabCoordinator.preferredParentWindow(),
+            replacingRecentURL: recentURL
+        )
+        withExtendedLifetime(bookmarkResolution) {}
     }
 
     private func openDocumentURL(
         _ targetURL: URL,
-        bookmarkResolution: BookmarkFileResolution? = nil,
-        windowSnapshot: WindowTabCoordinator.Snapshot? = nil
+        from sourceWindow: NSWindow?,
+        replacingRecentURL: URL? = nil
     ) {
-        let snapshot = windowSnapshot ?? WindowTabCoordinator.snapshot()
-        let directLease = bookmarkResolution == nil
-            ? SecurityScopedLease(url: targetURL)
-            : nil
-
-        Task { @MainActor in
-            do {
-                try await openDocument(at: targetURL)
-                recentDocuments.note(targetURL)
-                await WindowTabCoordinator.attachNextWindow(
-                    after: snapshot,
-                    replacingParent: replacingParentOnOpen
-                )
-            } catch {
-                NSDocumentController.shared.presentError(error)
-            }
-
-            withExtendedLifetime(bookmarkResolution) {}
-            withExtendedLifetime(directLease) {}
+        guard WindowOpenRouter.shared.open(
+            targetURL,
+            from: sourceWindow,
+            replacingRecentURL: replacingRecentURL
+        ) else {
+            NSDocumentController.shared.presentError(
+                DocumentLoadError.unsupportedType(targetURL.pathExtension)
+            )
+            return
         }
     }
 }

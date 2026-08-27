@@ -1,9 +1,8 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct WelcomeDropView: View {
-    @Environment(\.openDocument) private var openDocument
+    @Binding var route: ViewerWindowRoute
     @State private var isDropTarget = false
     @State private var errorMessage: String?
     @State private var didPrepareUITestFixture = false
@@ -57,41 +56,31 @@ struct WelcomeDropView: View {
     }
 
     private func chooseFile() {
-        // Preserve this tab as the parent before the open panel takes key-window status.
-        let windowSnapshot = WindowTabCoordinator.snapshot()
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.markLookMarkdown, .html]
-        panel.prompt = "Open"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            open(url, windowSnapshot: windowSnapshot)
+        let sourceWindow = WindowTabCoordinator.window(for: route)
+        DocumentOpenPanel.chooseFile(attachedTo: sourceWindow) { url in
+            open(url, sourceWindow: sourceWindow)
         }
     }
 
     private func acceptDrop(_ urls: [URL], _: CGPoint) -> Bool {
         guard let url = urls.first, (try? DocumentFormat(url: url)) != nil else { return false }
-        open(url)
+        open(url, sourceWindow: WindowTabCoordinator.window(for: route))
         return true
     }
 
     private func open(
         _ url: URL,
-        windowSnapshot: WindowTabCoordinator.Snapshot? = nil
+        sourceWindow: NSWindow? = nil
     ) {
-        let snapshot = windowSnapshot ?? WindowTabCoordinator.snapshot()
-        Task {
-            do {
-                try await openDocument(at: url)
-                await WindowTabCoordinator.attachNextWindow(
-                    after: snapshot,
-                    replacingParent: true
-                )
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+        let didOpen = WindowOpenRouter.shared.open(
+            url,
+            from: sourceWindow,
+            replaceCurrentWelcome: { route = $0 }
+        )
+        if !didOpen {
+            errorMessage = DocumentLoadError
+                .unsupportedType(url.pathExtension)
+                .localizedDescription
         }
     }
 
@@ -100,7 +89,7 @@ struct WelcomeDropView: View {
         didPrepareUITestFixture = true
         do {
             if let url = try UITestSupport.prepareFixture() {
-                open(url)
+                open(url, sourceWindow: WindowTabCoordinator.window(for: route))
             }
         } catch {
             errorMessage = error.localizedDescription

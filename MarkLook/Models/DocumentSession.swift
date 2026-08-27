@@ -7,7 +7,6 @@ import Observation
 @Observable
 final class DocumentSession {
     private(set) var currentURL: URL
-    private(set) var title: String
     private(set) var phase: ViewerPhase = .loading
     private(set) var issue: ViewerIssue?
     private(set) var warnings: [RenderWarning] = []
@@ -45,6 +44,7 @@ final class DocumentSession {
     @ObservationIgnored private var presentationGate = ReloadPresentationGate()
     @ObservationIgnored private var monitoringIssue: ViewerIssue?
     @ObservationIgnored private var markdownLineBreakMode: MarkdownLineBreakMode
+    @ObservationIgnored private var shouldOpenInCurrentWindow: ((URL, URL) -> Bool)?
 
     init(
         documentURL: URL,
@@ -57,7 +57,6 @@ final class DocumentSession {
         let restoredNavigation = Self.persistedNavigation(for: rootURL)
         let initialURL = restoredNavigation?.currentURL ?? rootURL
         currentURL = initialURL
-        title = initialURL.lastPathComponent
         self.renderer = renderer
         self.bookmarkStore = bookmarkStore
         self.recentDocuments = recentDocuments
@@ -95,13 +94,15 @@ final class DocumentSession {
         if initialURL.path != rootURL.path {
             try? bookmarkStore.save(Self.fileAccessURL(initialURL), asFolder: false)
         }
-        recentDocuments.note(Self.fileAccessURL(initialURL))
         updateHistoryFlags()
     }
 
     func start() {
         guard !didStart else { return }
         didStart = true
+        // Updating the observable Recent Files model during this object's SwiftUI-driven
+        // construction can invalidate the window graph while AppKit is laying it out.
+        recentDocuments.note(Self.fileAccessURL(currentURL))
         configureReloadPipeline()
     }
 
@@ -136,6 +137,22 @@ final class DocumentSession {
         }
     }
 
+    func setCurrentWindowNavigationPolicy(
+        _ policy: @escaping (URL, URL) -> Bool
+    ) {
+        shouldOpenInCurrentWindow = policy
+    }
+
+    func openRoutedFile(_ url: URL) {
+        let normalized = Self.normalizedDocumentURL(url)
+        guard normalized != currentURL else { return }
+        openFile(
+            normalized,
+            recordingHistory: true,
+            checkingWindowIdentity: false
+        )
+    }
+
     func findNext(backwards: Bool = false) {
         let query = findQuery
         Task { _ = await webViewStore.find(query, backwards: backwards) }
@@ -146,15 +163,19 @@ final class DocumentSession {
     }
 
     func goBack() {
-        guard let destination = backHistory.popLast() else { return }
+        guard let destination = backHistory.last,
+              canOpenInCurrentWindow(destination) else { return }
+        backHistory.removeLast()
         forwardHistory.append(currentURL)
-        openFile(destination, recordingHistory: false)
+        openFile(destination, recordingHistory: false, checkingWindowIdentity: false)
     }
 
     func goForward() {
-        guard let destination = forwardHistory.popLast() else { return }
+        guard let destination = forwardHistory.last,
+              canOpenInCurrentWindow(destination) else { return }
+        forwardHistory.removeLast()
         backHistory.append(currentURL)
-        openFile(destination, recordingHistory: false)
+        openFile(destination, recordingHistory: false, checkingWindowIdentity: false)
     }
 
     func grantFolderAccess() {
@@ -354,13 +375,6 @@ final class DocumentSession {
                 guard presentationGate.accepts(presentationTicket) else { return }
                 currentResources = snapshot.output.renderOutput.resources
                 warnings = result.warnings + resourceWarnings(for: currentResources)
-                if let renderedTitle = snapshot.output.renderOutput.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !renderedTitle.isEmpty
-                {
-                    title = renderedTitle
-                } else {
-                    title = currentURL.lastPathComponent
-                }
                 phase = .ready
                 issue = monitoringIssue
                 finishActivity()
@@ -425,14 +439,21 @@ final class DocumentSession {
         }
     }
 
-    private func openFile(_ url: URL, recordingHistory: Bool) {
+    private func openFile(
+        _ url: URL,
+        recordingHistory: Bool,
+        checkingWindowIdentity: Bool = true
+    ) {
         let normalized = Self.normalizedDocumentURL(url)
+        if checkingWindowIdentity,
+           !canOpenInCurrentWindow(normalized) {
+            return
+        }
         if recordingHistory, normalized != currentURL {
             backHistory.append(currentURL)
             forwardHistory.removeAll()
         }
         currentURL = normalized
-        title = normalized.lastPathComponent
         let accessURL = Self.fileAccessURL(normalized)
         scopes.append(.file(accessURL))
         leases.append(SecurityScopedLease(url: accessURL))
@@ -445,6 +466,10 @@ final class DocumentSession {
         updateHistoryFlags()
         persistNavigation()
         configureReloadPipeline()
+    }
+
+    private func canOpenInCurrentWindow(_ url: URL) -> Bool {
+        shouldOpenInCurrentWindow?(currentURL, Self.normalizedDocumentURL(url)) ?? true
     }
 
     private func didGrant(folder: URL) {
@@ -600,6 +625,7 @@ final class DocumentSession {
         )
         guard let data = try? PropertyListEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: Self.navigationKey(for: rootDocumentURL))
+        UserDefaults.standard.set(data, forKey: Self.navigationKey(for: currentURL))
     }
 
     private struct PersistedNavigationState: Codable {

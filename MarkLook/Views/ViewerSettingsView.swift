@@ -41,9 +41,9 @@ struct ViewerSettingsView: View {
             }
 
             Section("Markdown") {
-                Picker("Soft Breaks", selection: markdownLineBreakModeBinding) {
-                    Text("GFM Soft Breaks").tag(MarkdownLineBreakMode.gfmSoftBreaks)
-                    Text("Show Every Newline").tag(MarkdownLineBreakMode.preserveSingleNewlines)
+                Picker("Single Newlines", selection: markdownLineBreakModeBinding) {
+                    Text("Continue Paragraph").tag(MarkdownLineBreakMode.gfmSoftBreaks)
+                    Text("Show as Line Breaks").tag(MarkdownLineBreakMode.preserveSingleNewlines)
                 }
                 .pickerStyle(.radioGroup)
 
@@ -97,9 +97,9 @@ struct ViewerSettingsView: View {
     private var markdownLineBreakModeDescription: String {
         switch markdownLineBreakMode {
         case .gfmSoftBreaks:
-            "A single newline remains a soft break. Use two trailing spaces or a backslash for a visible line break."
+            "Single newlines continue the same paragraph. Use two trailing spaces or a backslash for a visible line break."
         case .preserveSingleNewlines:
-            "Every soft break is rendered as a visible line break. Other Markdown syntax is unchanged."
+            "Every single newline is shown as a line break. Other Markdown syntax is unchanged."
         }
     }
 }

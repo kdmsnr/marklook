@@ -8,57 +8,72 @@ struct MarkLookApp: App {
     var body: some Scene {
         WindowGroup(
             "MarkLook",
-            id: WelcomeWindowIdentity.sceneID,
-            for: UUID.self
-        ) { _ in
-            WelcomeDropView()
-                .background(WindowTabRegistrationView())
+            id: ViewerWindowRoute.sceneID,
+            for: ViewerWindowRoute.self
+        ) { route in
+            ViewerWindowRoot(route: route)
         } defaultValue: {
-            WelcomeWindowIdentity.initialValue
-        }
-        .defaultSize(width: 620, height: 420)
-        .windowToolbarStyle(.unified)
-        .commands {
-            ViewerCommands(
-                recentDocuments: .shared,
-                replacingParentOnOpen: true
-            )
-        }
-
-        DocumentGroup(viewing: ViewerDocument.self) { configuration in
-            if let fileURL = configuration.fileURL {
-                DocumentRootView(documentURL: fileURL)
-                    .id(fileURL.standardizedFileURL)
-                    .background(WindowTabRegistrationView())
-            } else {
-                ContentUnavailableView(
-                    "File Unavailable",
-                    systemImage: "doc.badge.ellipsis",
-                    description: Text("MarkLook could not determine the document location.")
-                )
-                .background(WindowTabRegistrationView())
-            }
+            .welcome(UUID())
         }
         .defaultSize(width: 900, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
-            ViewerCommands(
-                recentDocuments: .shared,
-                replacingParentOnOpen: false
-            )
+            ViewerCommands(recentDocuments: .shared)
         }
+    }
+}
 
+private struct ViewerWindowRoot: View {
+    @Binding var route: ViewerWindowRoute
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Group {
+            switch route {
+            case let .document(url):
+                DocumentRootView(
+                    documentURL: url,
+                    currentURLDidChange: updateDocumentRoute
+                )
+            case .welcome:
+                WelcomeDropView(route: $route)
+            }
+        }
+        .navigationTitle(route.windowTitle)
+        .background(WindowTabRegistrationView(route: $route))
+        .onAppear {
+            WindowOpenRouter.shared.install { destination in
+                openWindow(id: ViewerWindowRoute.sceneID, value: destination)
+            }
+        }
+    }
+
+    private func updateDocumentRoute(_ url: URL) {
+        guard let updatedRoute = ViewerWindowRoute.viewing(url),
+              route != updatedRoute else { return }
+        route = updatedRoute
     }
 }
 
 @MainActor
 private final class MarkLookAppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_: Notification) {
+    func applicationWillFinishLaunching(_: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = true
-        RecentDocuments.shared.activate(documentController: .shared)
+    }
+
+    func applicationDidFinishLaunching(_: Notification) {
+        RecentDocuments.shared.activate(documentController: NSDocumentController.shared)
+    }
+
+    func application(_: NSApplication, open urls: [URL]) {
+        WindowOpenRouter.shared.enqueueExternalOpen(urls)
     }
 
     func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         !flag
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
+        true
     }
 }

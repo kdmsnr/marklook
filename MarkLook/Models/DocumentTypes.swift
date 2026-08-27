@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 enum DocumentFormat: String, Sendable, Codable {
     case markdown
@@ -132,4 +133,11 @@ enum DocumentLoadError: LocalizedError, Sendable, Equatable {
             return "Rendering failed: \(message)"
         }
     }
+}
+
+extension UTType {
+    static let markLookMarkdown = UTType(
+        importedAs: "net.daringfireball.markdown",
+        conformingTo: .plainText
+    )
 }

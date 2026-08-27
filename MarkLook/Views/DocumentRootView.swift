@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct DocumentRootView: View {
-    @Environment(\.dismissWindow) private var dismissWindow
-    @Environment(\.openDocument) private var openDocument
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(ViewerLayoutPreferences.contentWidthKey)
     private var configuredContentWidth = ViewerLayoutPreferences.defaultContentWidth
@@ -10,11 +8,21 @@ struct DocumentRootView: View {
     private var usesFullContentWidth = false
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
-    @State private var session: DocumentSession
+    @State private var sessionOwner = DocumentSessionOwner()
     @State private var warningsArePresented = false
+    private let documentURL: URL
+    private let currentURLDidChange: (URL) -> Void
 
-    init(documentURL: URL) {
-        _session = State(initialValue: DocumentSession(documentURL: documentURL))
+    init(
+        documentURL: URL,
+        currentURLDidChange: @escaping (URL) -> Void = { _ in }
+    ) {
+        self.documentURL = documentURL
+        self.currentURLDidChange = currentURLDidChange
+    }
+
+    private var session: DocumentSession {
+        sessionOwner.session(for: documentURL)
     }
 
     var body: some View {
@@ -62,17 +70,13 @@ struct DocumentRootView: View {
             .padding(12)
         }
         .frame(minWidth: 520, minHeight: 380)
-        .navigationTitle(session.title)
         .task {
-            // Finder and state restoration can open a document without passing through the
-            // welcome view's explicit replacement path.
-            dismissWindow(
-                id: WelcomeWindowIdentity.sceneID,
-                value: WelcomeWindowIdentity.initialValue
-            )
+            WindowOpenRouter.shared.documentSessionDidStart(for: documentURL)
+            session.setCurrentWindowNavigationPolicy(Self.shouldOpenInCurrentWindow)
             session.setContentWidth(effectiveContentWidth)
             session.setMarkdownLineBreakMode(markdownLineBreakMode)
             session.start()
+            currentURLDidChange(session.currentURL)
         }
         .onChange(of: effectiveContentWidth) { _, width in
             session.setContentWidth(width)
@@ -90,6 +94,12 @@ struct DocumentRootView: View {
             guard let request else { return }
             session.consumeOpenDocumentRequest()
             openInNewTab(request.url)
+        }
+        .onChange(of: session.currentURL) { _, url in
+            currentURLDidChange(url)
+        }
+        .onChange(of: documentURL) { _, url in
+            session.openRoutedFile(url)
         }
         .focusedSceneValue(\.viewerActions, viewerActions)
         .dropDestination(for: URL.self) { urls, _ in
@@ -182,15 +192,48 @@ struct DocumentRootView: View {
     }
 
     private func openInNewTab(_ url: URL) {
-        let snapshot = WindowTabCoordinator.snapshot()
-        Task {
-            do {
-                try await openDocument(at: url)
-                await WindowTabCoordinator.attachNextWindow(after: snapshot)
-            } catch {
-                session.reportOpenFailure(error)
-            }
+        let sourceRoute = ViewerWindowRoute.viewing(session.currentURL)
+        let sourceWindow = WindowTabCoordinator.window(for: sourceRoute)
+        if !WindowOpenRouter.shared.open(
+            url,
+            from: sourceWindow
+        ) {
+            session.reportOpenFailure(
+                DocumentLoadError.unsupportedType(url.pathExtension)
+            )
         }
+    }
+
+    private static func shouldOpenInCurrentWindow(
+        _ currentURL: URL,
+        _ targetURL: URL
+    ) -> Bool {
+        guard let targetRoute = ViewerWindowRoute.viewing(targetURL) else {
+            return true
+        }
+        let currentRoute = ViewerWindowRoute.viewing(currentURL)
+        let currentWindow = WindowTabCoordinator.window(for: currentRoute)
+        return !WindowTabCoordinator.focusExistingWindow(
+            for: targetRoute,
+            excluding: currentWindow
+        )
+    }
+}
+
+/// Keeps expensive document state out of the SwiftUI view initializer. SwiftUI may construct
+/// transient `DocumentRootView` values while evaluating the graph; creating a `WKWebView` there
+/// would launch a WebContent process for every transient value.
+@MainActor
+private final class DocumentSessionOwner {
+    private var storedSession: DocumentSession?
+
+    func session(for documentURL: URL) -> DocumentSession {
+        if let storedSession {
+            return storedSession
+        }
+        let session = DocumentSession(documentURL: documentURL)
+        storedSession = session
+        return session
     }
 }
 

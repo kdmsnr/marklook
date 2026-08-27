@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Keeps the settings UI out of the root Scene formula while DocumentGroup is registered.
+/// Keeps the utility window independent from viewer-window routing and native tab groups.
 /// This restores the previously working root-scene shape after an observed launch crash inside
 /// PlatformDocumentController, while still hosting the same SwiftUI settings view and state.
 @MainActor
