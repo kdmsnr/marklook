@@ -9,6 +9,13 @@
   --accent: light-dark(#0969da, #58a6ff);
   --quote: light-dark(#656d76, #8b949e);
   --selection: light-dark(#b6d7ff, #264f78);
+  --callout-blue: light-dark(#0969da, #58a6ff);
+  --callout-cyan: light-dark(#087f8c, #56d4dd);
+  --callout-green: light-dark(#1a7f37, #3fb950);
+  --callout-orange: light-dark(#9a6700, #d29922);
+  --callout-red: light-dark(#cf222e, #f85149);
+  --callout-purple: light-dark(#8250df, #bc8cff);
+  --callout-gray: var(--quote);
   --marklook-content-width: 1200px;
 }
 
@@ -69,6 +76,68 @@ blockquote {
 }
 blockquote > :last-child { margin-bottom: 0; }
 
+.callout {
+  --callout-color: var(--callout-blue);
+  --callout-symbol: "✎";
+  background: color-mix(in srgb, var(--callout-color) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--callout-color) 35%, var(--border));
+  border-inline-start: 4px solid var(--callout-color);
+  border-radius: 9px;
+  color: var(--foreground);
+  display: block;
+  margin: 0 0 1em;
+  overflow: clip;
+}
+.callout > .callout-title {
+  color: var(--foreground);
+  font-weight: 650;
+  line-height: 1.35;
+  padding: 0.7em 0.9em 0.3em;
+}
+.callout > .callout-title:last-child { padding-bottom: 0.7em; }
+.callout > summary.callout-title {
+  cursor: pointer;
+  display: list-item;
+  padding-block: 0.7em;
+}
+.callout > summary.callout-title::marker { color: var(--callout-color); }
+.callout > summary.callout-title:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--callout-color);
+  outline-offset: -3px;
+}
+.callout-icon {
+  color: var(--callout-color);
+  display: inline-grid;
+  inline-size: 1.15em;
+  margin-inline-end: 0.45em;
+  place-items: center;
+}
+.callout-icon::before { content: var(--callout-symbol); }
+.callout > .callout-content {
+  min-width: 0;
+  padding: 0.3em 0.9em 0.8em;
+}
+.callout-content > :last-child { margin-bottom: 0; }
+.callout .callout {
+  background: color-mix(in srgb, var(--callout-color) 6%, var(--surface));
+  margin-block: 0.75em;
+}
+.callout-content > .callout:last-child { margin-bottom: 0; }
+
+.callout:is([data-callout="abstract"], [data-callout="summary"], [data-callout="tldr"]) { --callout-color: var(--callout-cyan); --callout-symbol: "≡"; }
+.callout[data-callout="info"] { --callout-color: var(--callout-blue); --callout-symbol: "i"; }
+.callout[data-callout="todo"] { --callout-symbol: "☐"; }
+.callout:is([data-callout="tip"], [data-callout="hint"], [data-callout="important"]) { --callout-color: var(--callout-cyan); --callout-symbol: "✦"; }
+.callout:is([data-callout="success"], [data-callout="check"], [data-callout="done"]) { --callout-color: var(--callout-green); --callout-symbol: "✓"; }
+.callout:is([data-callout="question"], [data-callout="help"], [data-callout="faq"]) { --callout-color: var(--callout-orange); --callout-symbol: "?"; }
+.callout:is([data-callout="warning"], [data-callout="caution"], [data-callout="attention"]) { --callout-color: var(--callout-orange); --callout-symbol: "!"; }
+.callout:is([data-callout="failure"], [data-callout="fail"], [data-callout="missing"]) { --callout-color: var(--callout-red); --callout-symbol: "×"; }
+.callout:is([data-callout="danger"], [data-callout="error"]) { --callout-color: var(--callout-red); --callout-symbol: "‼"; }
+.callout[data-callout="bug"] { --callout-color: var(--callout-red); --callout-symbol: "※"; }
+.callout[data-callout="example"] { --callout-color: var(--callout-purple); --callout-symbol: "∴"; }
+.callout:is([data-callout="quote"], [data-callout="cite"]) { --callout-color: var(--callout-gray); --callout-symbol: "“"; }
+
 code, kbd, samp {
   background: var(--surface);
   border-radius: 5px;
@@ -114,6 +183,10 @@ input[type="checkbox"] {
 @media print {
   #document-content { max-width: none; padding: 0; }
   a { color: inherit; text-decoration: underline; }
+  details.callout:not([open]) > .callout-content { display: block !important; }
+  details.callout > summary.callout-title { cursor: default; display: block; }
+  details.callout > summary.callout-title::marker { content: ""; }
+  details.callout > summary.callout-title::-webkit-details-marker { display: none; }
   pre { white-space: pre-wrap; }
 }
 

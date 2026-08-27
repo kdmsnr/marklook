@@ -154,6 +154,26 @@
     };
   }
 
+  function captureCalloutDisclosureState() {
+    const disclosureState = new Map();
+    for (const callout of state.content.querySelectorAll("details.callout[data-marklook-anchor]")) {
+      const anchor = callout.getAttribute("data-marklook-anchor");
+      if (anchor !== null && !disclosureState.has(anchor)) {
+        disclosureState.set(anchor, callout.open);
+      }
+    }
+    return disclosureState;
+  }
+
+  function restoreCalloutDisclosureState(disclosureState) {
+    for (const callout of state.content.querySelectorAll("details.callout[data-marklook-anchor]")) {
+      const anchor = callout.getAttribute("data-marklook-anchor");
+      if (anchor !== null && disclosureState.has(anchor)) {
+        callout.open = disclosureState.get(anchor);
+      }
+    }
+  }
+
   function syncAttributes(current, incoming) {
     for (const attribute of [...current.attributes]) {
       if (!incoming.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
@@ -192,10 +212,14 @@
   }
 
   function patchContent(fragment, useFineDiff) {
+    const disclosureState = state.firstRender
+      ? new Map()
+      : captureCalloutDisclosureState();
     const template = document.createElement("template");
     template.innerHTML = fragment;
     if (!useFineDiff || state.firstRender) {
       state.content.replaceChildren(template.content.cloneNode(true));
+      restoreCalloutDisclosureState(disclosureState);
       return;
     }
 
@@ -209,6 +233,7 @@
     while (state.content.childNodes.length > incoming.length) {
       state.content.lastChild?.remove();
     }
+    restoreCalloutDisclosureState(disclosureState);
   }
 
   function renderMath() {

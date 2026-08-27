@@ -120,6 +120,8 @@ struct HTMLSanitizer: Sendable {
         )
         try whitelist.addAttributes("a", "href", "rel")
         try whitelist.addAttributes("blockquote", "cite")
+        try whitelist.addAttributes("div", "data-callout")
+        try whitelist.addAttributes("details", "data-callout", "open")
         try whitelist.addAttributes("img", "src", "alt", "width", "height", "loading", "decoding")
         try whitelist.addAttributes("link", "rel", "href", "media")
         try whitelist.addAttributes("input", "type", "checked", "disabled")

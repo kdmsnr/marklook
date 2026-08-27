@@ -54,6 +54,7 @@ actor GFMRenderEngine: RenderEngine {
             formatted = SecureHTMLFormatter.Output(
                 html: SecureHTMLFormatter.format(
                     document,
+                    source: processed.source,
                     lineBreakMode: context.markdownLineBreakMode,
                     estimatedSourceByteCount: estimatedSourceByteCount
                 ),
@@ -63,6 +64,7 @@ actor GFMRenderEngine: RenderEngine {
         } else {
             formatted = SecureHTMLFormatter.format(
                 document,
+                source: processed.source,
                 context: context,
                 estimatedSourceByteCount: estimatedSourceByteCount
             )
@@ -97,11 +99,13 @@ actor GFMRenderEngine: RenderEngine {
                 if requiresFullSanitization {
                     content = SecureHTMLFormatter.format(
                         footnoteDocument,
+                        source: footnote.source,
                         lineBreakMode: context.markdownLineBreakMode
                     )
                 } else {
                     let formattedFootnote = SecureHTMLFormatter.format(
                         footnoteDocument,
+                        source: footnote.source,
                         context: context
                     )
                     content = formattedFootnote.html

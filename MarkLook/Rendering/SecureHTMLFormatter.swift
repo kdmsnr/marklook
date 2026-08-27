@@ -21,14 +21,17 @@ struct SecureHTMLFormatter: MarkupWalker {
     private var headingAnchorBaseCache: [String: String] = [:]
     private let context: RenderContext?
     private let lineBreakMode: MarkdownLineBreakMode
+    private let source: MarkdownSourceText
     private let sanitizer = HTMLSanitizer()
 
     init(
+        source: String,
         context: RenderContext? = nil,
         lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
         estimatedSourceByteCount: Int = 0
     ) {
         self.context = context
+        self.source = MarkdownSourceText(source)
         self.lineBreakMode = lineBreakMode
         if estimatedSourceByteCount > 0 {
             result.reserveCapacity(estimatedSourceByteCount.multipliedReportingOverflow(by: 2).partialValue)
@@ -37,10 +40,12 @@ struct SecureHTMLFormatter: MarkupWalker {
 
     static func format(
         _ markup: Markup,
+        source: String,
         lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
         estimatedSourceByteCount: Int = 0
     ) -> String {
         var formatter = SecureHTMLFormatter(
+            source: source,
             lineBreakMode: lineBreakMode,
             estimatedSourceByteCount: estimatedSourceByteCount
         )
@@ -50,10 +55,12 @@ struct SecureHTMLFormatter: MarkupWalker {
 
     static func format(
         _ markup: Markup,
+        source: String,
         context: RenderContext,
         estimatedSourceByteCount: Int = 0
     ) -> Output {
         var formatter = SecureHTMLFormatter(
+            source: source,
             context: context,
             lineBreakMode: context.markdownLineBreakMode,
             estimatedSourceByteCount: estimatedSourceByteCount
@@ -71,6 +78,10 @@ struct SecureHTMLFormatter: MarkupWalker {
     }
 
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
+        if let callout = ObsidianCallout(blockQuote, source: source) {
+            renderCallout(callout, source: blockQuote)
+            return
+        }
         result += "<blockquote>\n"
         descendInto(blockQuote)
         result += "</blockquote>\n"
@@ -268,6 +279,48 @@ struct SecureHTMLFormatter: MarkupWalker {
         result += "<\(tag)>"
         descendInto(content)
         result += "</\(tag)>"
+    }
+
+    private mutating func renderCallout(_ callout: ObsidianCallout, source: BlockQuote) {
+        let anchor = uniqueHashedAnchor(prefix: "callout", markup: source)
+        let attributes = "class=\"callout\" data-callout=\"\(HTMLEscaping.attribute(callout.type))\" data-marklook-anchor=\"\(anchor)\""
+        let rootTag: String
+        let titleTag: String
+
+        if let foldState = callout.foldState {
+            rootTag = "details"
+            titleTag = "summary"
+            let open = foldState == .expanded ? " open" : ""
+            result += "<details \(attributes)\(open)>\n"
+        } else {
+            rootTag = "div"
+            titleTag = "div"
+            result += "<div \(attributes) role=\"note\" aria-labelledby=\"\(anchor)-title\">\n"
+        }
+
+        let titleID = callout.foldState == nil ? " id=\"\(anchor)-title\"" : ""
+        result += "<\(titleTag)\(titleID) class=\"callout-title\"><span class=\"callout-icon\" aria-hidden=\"true\"></span><span class=\"callout-title-inner\">"
+        if callout.title.isEmpty {
+            result += HTMLEscaping.text(callout.defaultTitle)
+        } else {
+            for inline in callout.title {
+                visit(inline)
+            }
+        }
+        result += "</span></\(titleTag)>\n"
+
+        if callout.hasBody {
+            result += "<div class=\"callout-content\">\n"
+            if let leadingBodyParagraph = callout.leadingBodyParagraph {
+                visit(leadingBodyParagraph)
+            }
+            for block in callout.remainingBody {
+                visit(block)
+            }
+            result += "</div>\n"
+        }
+
+        result += "</\(rootTag)>\n"
     }
 
     private func normalizedLanguage(_ raw: String?) -> String? {
