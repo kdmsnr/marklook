@@ -7,6 +7,9 @@ struct ViewerSettingsView: View {
     @AppStorage(ViewerLayoutPreferences.usesFullWidthKey)
     private var usesFullWidth = false
 
+    @AppStorage(ViewerFontPreferences.fontFamilyKey)
+    private var storedFontFamily = ViewerFontPreferences.defaultFontFamily.rawValue
+
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
 
@@ -19,6 +22,12 @@ struct ViewerSettingsView: View {
     var body: some View {
         Form {
             Section("Reading") {
+                Picker("Document Font", selection: fontFamilyBinding) {
+                    ForEach(ViewerFontFamily.allCases, id: \.self) { fontFamily in
+                        Text(fontFamily.displayName).tag(fontFamily)
+                    }
+                }
+
                 Toggle("Use Full Window Width", isOn: $usesFullWidth)
 
                 LabeledContent("Content Width") {
@@ -126,6 +135,7 @@ struct ViewerSettingsView: View {
             Button("Restore Default") {
                 configuredWidth = ViewerLayoutPreferences.defaultContentWidth
                 usesFullWidth = false
+                storedFontFamily = ViewerFontPreferences.defaultFontFamily.rawValue
                 storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
                 storedAllowedHosts = RemoteContentPreferences.defaultStoredValue
                 allowedHostDraft = ""
@@ -134,6 +144,7 @@ struct ViewerSettingsView: View {
             .disabled(
                 !usesFullWidth
                     && normalizedWidth == ViewerLayoutPreferences.defaultContentWidth
+                    && storedFontFamily == ViewerFontPreferences.defaultFontFamily.rawValue
                     && storedMarkdownLineBreakMode == MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
                     && storedAllowedHosts == RemoteContentPreferences.defaultStoredValue
             )
@@ -159,6 +170,17 @@ struct ViewerSettingsView: View {
 
     private var markdownLineBreakMode: MarkdownLineBreakMode {
         MarkdownRenderingPreferences.lineBreakMode(storedValue: storedMarkdownLineBreakMode)
+    }
+
+    private var fontFamily: ViewerFontFamily {
+        ViewerFontPreferences.fontFamily(storedValue: storedFontFamily)
+    }
+
+    private var fontFamilyBinding: Binding<ViewerFontFamily> {
+        Binding(
+            get: { fontFamily },
+            set: { storedFontFamily = $0.rawValue }
+        )
     }
 
     private var markdownLineBreakModeBinding: Binding<MarkdownLineBreakMode> {

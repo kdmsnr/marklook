@@ -130,6 +130,10 @@ final class DocumentSession {
         webViewStore.setContentWidth(value)
     }
 
+    func setFontFamily(_ fontFamily: ViewerFontFamily) {
+        webViewStore.setFontFamily(fontFamily)
+    }
+
     func setMarkdownLineBreakMode(_ mode: MarkdownLineBreakMode) {
         guard markdownLineBreakMode != mode else { return }
         markdownLineBreakMode = mode

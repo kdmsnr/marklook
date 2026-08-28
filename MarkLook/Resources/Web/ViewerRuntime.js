@@ -12,6 +12,10 @@
     contentWidthRevision: 0,
     requestedContentWidth: 1200,
     requestedContentWidthRevision: 0,
+    fontFamily: "system",
+    fontFamilyRevision: 0,
+    requestedFontFamily: "system",
+    requestedFontFamilyRevision: 0,
     layoutVersion: 0,
     layoutGate: Promise.resolve(),
     activeLayoutReaders: 0,
@@ -101,6 +105,25 @@
     return true;
   }
 
+  function normalizedFontFamily(value) {
+    return ["system", "hiragino-sans", "hiragino-mincho"].includes(value)
+      ? value
+      : "system";
+  }
+
+  function applyFontFamily(value, revision) {
+    const numericRevision = Number(revision);
+    const newestRevision = Math.max(
+      state.fontFamilyRevision,
+      state.requestedFontFamilyRevision
+    );
+    if (Number.isFinite(numericRevision) && numericRevision < newestRevision) return false;
+    if (Number.isFinite(numericRevision)) state.fontFamilyRevision = numericRevision;
+    state.fontFamily = normalizedFontFamily(value);
+    state.content?.setAttribute("data-marklook-font-family", state.fontFamily);
+    return true;
+  }
+
   function cacheValue(cache, key, value, limit) {
     if (cache.has(key)) cache.delete(key);
     cache.set(key, value);
@@ -120,6 +143,7 @@
     state.root.append(style, content);
     state.content = content;
     applyContentWidth(state.contentWidth, state.contentWidthRevision);
+    applyFontFamily(state.fontFamily, state.fontFamilyRevision);
 
     state.content.addEventListener("click", handleFragmentLinkClick);
 
@@ -382,6 +406,12 @@
             state.requestedContentWidthRevision
           );
         }
+        if (!applyFontFamily(argumentsObject.fontFamily, argumentsObject.fontFamilyRevision)) {
+          applyFontFamily(
+            state.requestedFontFamily,
+            state.requestedFontFamilyRevision
+          );
+        }
         patchContent(argumentsObject.html || "", Boolean(argumentsObject.useFineDiff));
         state.content.classList.toggle("marklook-lightweight", !argumentsObject.useFineDiff);
         const warnings = argumentsObject.containsMath ? renderMath() : [];
@@ -442,6 +472,46 @@
 
         await nextFrame();
         if (layoutVersion !== state.layoutVersion || state.interactionVersion !== interactionVersion) return false;
+        restoreScroll(snapshot, null);
+        return true;
+      } finally {
+        endExclusiveLayoutChange();
+      }
+    },
+
+    async setFontFamily(fontFamily, revision) {
+      const numericRevision = Number(revision);
+      if (Number.isFinite(numericRevision)) {
+        if (numericRevision < state.requestedFontFamilyRevision) return false;
+        state.requestedFontFamilyRevision = numericRevision;
+        state.requestedFontFamily = normalizedFontFamily(fontFamily);
+      }
+
+      await beginExclusiveLayoutChange();
+      try {
+        if (Number.isFinite(numericRevision)
+            && numericRevision < state.requestedFontFamilyRevision) return false;
+
+        const targetFontFamily = Number.isFinite(numericRevision)
+          ? state.requestedFontFamily
+          : normalizedFontFamily(fontFamily);
+        const targetRevision = Number.isFinite(numericRevision)
+          ? state.requestedFontFamilyRevision
+          : revision;
+        if (targetRevision <= state.fontFamilyRevision
+            && targetFontFamily === state.fontFamily) return true;
+
+        const snapshot = state.content && !state.firstRender
+          ? { ...captureScroll(), fragment: null }
+          : null;
+        const interactionVersion = state.interactionVersion;
+        if (!applyFontFamily(targetFontFamily, targetRevision)) return false;
+        const layoutVersion = ++state.layoutVersion;
+        if (!snapshot) return true;
+
+        await nextFrame();
+        if (layoutVersion !== state.layoutVersion
+            || state.interactionVersion !== interactionVersion) return false;
         restoreScroll(snapshot, null);
         return true;
       } finally {

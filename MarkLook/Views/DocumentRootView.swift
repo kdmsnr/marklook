@@ -6,6 +6,8 @@ struct DocumentRootView: View {
     private var configuredContentWidth = ViewerLayoutPreferences.defaultContentWidth
     @AppStorage(ViewerLayoutPreferences.usesFullWidthKey)
     private var usesFullContentWidth = false
+    @AppStorage(ViewerFontPreferences.fontFamilyKey)
+    private var storedFontFamily = ViewerFontPreferences.defaultFontFamily.rawValue
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
     @AppStorage(RemoteContentPreferences.allowedHostsKey)
@@ -76,6 +78,7 @@ struct DocumentRootView: View {
             WindowOpenRouter.shared.documentSessionDidStart(for: documentURL)
             session.setCurrentWindowNavigationPolicy(Self.shouldOpenInCurrentWindow)
             session.setContentWidth(effectiveContentWidth)
+            session.setFontFamily(fontFamily)
             session.setMarkdownLineBreakMode(markdownLineBreakMode)
             session.setRemoteContentPolicy(remoteContentPolicy)
             session.start()
@@ -83,6 +86,9 @@ struct DocumentRootView: View {
         }
         .onChange(of: effectiveContentWidth) { _, width in
             session.setContentWidth(width)
+        }
+        .onChange(of: fontFamily) { _, fontFamily in
+            session.setFontFamily(fontFamily)
         }
         .onChange(of: markdownLineBreakMode) { _, mode in
             session.setMarkdownLineBreakMode(mode)
@@ -180,6 +186,10 @@ struct DocumentRootView: View {
 
     private var markdownLineBreakMode: MarkdownLineBreakMode {
         MarkdownRenderingPreferences.lineBreakMode(storedValue: storedMarkdownLineBreakMode)
+    }
+
+    private var fontFamily: ViewerFontFamily {
+        ViewerFontPreferences.fontFamily(storedValue: storedFontFamily)
     }
 
     private var remoteContentPolicy: RemoteContentPolicy {

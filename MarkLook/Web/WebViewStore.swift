@@ -94,6 +94,8 @@ final class WebViewStore: NSObject {
     private var shellWaiters: [CheckedContinuation<Void, Never>] = []
     private var contentWidth: Double? = ViewerLayoutPreferences.defaultContentWidth
     private var contentWidthRevision: UInt64 = 0
+    private var fontFamily = ViewerFontPreferences.defaultFontFamily
+    private var fontFamilyRevision: UInt64 = 0
     private var pdfExportInProgress = false
     private var pdfExportCompletion: (() -> Void)?
     private var pdfPanel: NSPDFPanel?
@@ -183,6 +185,8 @@ final class WebViewStore: NSObject {
                 "highlight": highlight,
                 "contentWidth": contentWidth.map(NSNumber.init(value:)) ?? NSNull(),
                 "contentWidthRevision": NSNumber(value: contentWidthRevision),
+                "fontFamily": fontFamily.rawValue,
+                "fontFamilyRevision": NSNumber(value: fontFamilyRevision),
                 "baseCSS": baseCSS,
                 "katexCSS": katexCSS,
                 "highlightCSS": highlightCSS,
@@ -278,6 +282,26 @@ final class WebViewStore: NSObject {
                 "return await globalThis.marklookRuntime.setContentWidth(width, revision);",
                 arguments: [
                     "width": argument,
+                    "revision": NSNumber(value: revision),
+                ],
+                contentWorld: Self.contentWorld
+            )
+        }
+    }
+
+    func setFontFamily(_ value: ViewerFontFamily) {
+        guard value != fontFamily else { return }
+        fontFamily = value
+        fontFamilyRevision &+= 1
+        guard shellReady else { return }
+
+        let revision = fontFamilyRevision
+        Task { [weak self] in
+            guard let self else { return }
+            _ = try? await webView.callAsyncJavaScript(
+                "return await globalThis.marklookRuntime.setFontFamily(fontFamily, revision);",
+                arguments: [
+                    "fontFamily": value.rawValue,
                     "revision": NSNumber(value: revision),
                 ],
                 contentWorld: Self.contentWorld

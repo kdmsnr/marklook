@@ -36,6 +36,14 @@
   text-rendering: optimizeLegibility;
 }
 
+#document-content[data-marklook-font-family="hiragino-sans"] {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Hiragino Kaku Gothic Pro", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+#document-content[data-marklook-font-family="hiragino-mincho"] {
+  font-family: "Hiragino Mincho ProN", "Hiragino Mincho Pro", YuMincho, "Yu Mincho", serif;
+}
+
 #document-content.marklook-lightweight,
 #document-content.marklook-lightweight * {
   animation: none !important;
