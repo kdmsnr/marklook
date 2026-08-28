@@ -12,11 +12,16 @@ struct MarkupPreprocessor: Sendable {
         let source: String
     }
 
+    struct FootnoteReference: Sendable {
+        let token: String
+        let id: String
+    }
+
     struct Result: Sendable {
         let source: String
         let math: [MathReplacement]
         let footnotes: [Footnote]
-        let footnoteReferenceTokens: [String: String]
+        let footnoteReferences: [FootnoteReference]
     }
 
     func process(_ input: String) -> Result {
@@ -29,7 +34,7 @@ struct MarkupPreprocessor: Sendable {
                 source: input,
                 math: [],
                 footnotes: [],
-                footnoteReferenceTokens: [:]
+                footnoteReferences: []
             )
         }
 
@@ -47,7 +52,7 @@ struct MarkupPreprocessor: Sendable {
                 source: normalized,
                 math: [],
                 footnotes: [],
-                footnoteReferenceTokens: [:]
+                footnoteReferences: []
             )
         }
 
@@ -56,29 +61,51 @@ struct MarkupPreprocessor: Sendable {
         let footnoteIDs = Set(extracted.footnotes.map(\.id))
 
         var math: [MathReplacement] = []
-        var referenceTokens: [String: String] = [:]
+        var footnoteReferences: [FootnoteReference] = []
         var output: [String] = []
-        var inFence = false
-        var fenceMarker = ""
+        var activeFence: MarkdownFence?
+        var inlineCodeDelimiterLength: Int?
         var blockMathLines: [String]? = nil
 
-        for line in extracted.source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+        let lines = extracted.source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let codeSpanPlan = codeSpanPlan(in: lines)
+        for (lineNumber, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if let marker = fenceStart(in: trimmed) {
-                if !inFence {
-                    inFence = true
-                    fenceMarker = marker
-                } else if trimmed.hasPrefix(fenceMarker) {
-                    inFence = false
-                    fenceMarker = ""
+            if codeSpanPlan.resetBeforeLines.contains(lineNumber) {
+                inlineCodeDelimiterLength = nil
+            }
+            defer {
+                if codeSpanPlan.resetAfterLines.contains(lineNumber) {
+                    inlineCodeDelimiterLength = nil
                 }
+            }
+
+            if let fence = activeFence {
+                if isFenceClosing(line, for: fence) { activeFence = nil }
                 output.append(line)
                 continue
             }
-
-            if inFence {
+            if let fence = fenceOpening(in: line) {
+                activeFence = fence
+                inlineCodeDelimiterLength = nil
                 output.append(line)
+                continue
+            }
+            if trimmed.isEmpty { inlineCodeDelimiterLength = nil }
+
+            // A CommonMark code span may cross a soft line break. While one is open, let the
+            // inline scanner consume the line before considering block-math markers.
+            if inlineCodeDelimiterLength != nil {
+                output.append(processInline(
+                    line,
+                    prefix: prefix,
+                    math: &math,
+                    footnoteIDs: footnoteIDs,
+                    footnoteReferences: &footnoteReferences,
+                    codeDelimiterLength: &inlineCodeDelimiterLength,
+                    lineNumber: lineNumber,
+                    codeSpanOpeners: codeSpanPlan.openers
+                ))
                 continue
             }
 
@@ -115,7 +142,10 @@ struct MarkupPreprocessor: Sendable {
                 prefix: prefix,
                 math: &math,
                 footnoteIDs: footnoteIDs,
-                referenceTokens: &referenceTokens
+                footnoteReferences: &footnoteReferences,
+                codeDelimiterLength: &inlineCodeDelimiterLength,
+                lineNumber: lineNumber,
+                codeSpanOpeners: codeSpanPlan.openers
             ))
         }
 
@@ -127,7 +157,7 @@ struct MarkupPreprocessor: Sendable {
             source: output.joined(separator: "\n"),
             math: math,
             footnotes: extracted.footnotes,
-            footnoteReferenceTokens: referenceTokens
+            footnoteReferences: footnoteReferences
         )
     }
 
@@ -154,10 +184,36 @@ struct MarkupPreprocessor: Sendable {
         return (hasCarriageReturn, hasExtension)
     }
 
-    private func fenceStart(in trimmed: String) -> String? {
-        if trimmed.hasPrefix("```") { return "```" }
-        if trimmed.hasPrefix("~~~") { return "~~~" }
-        return nil
+    private func fenceOpening(in line: String) -> MarkdownFence? {
+        guard let contentStart = fenceContentStart(in: line), contentStart < line.endIndex else {
+            return nil
+        }
+        let marker = line[contentStart]
+        guard marker == "`" || marker == "~" else { return nil }
+        let run = characterRun(in: line, from: contentStart, character: marker)
+        guard run.count >= 3 else { return nil }
+        if marker == "`", line[run.end...].contains("`") { return nil }
+        return MarkdownFence(marker: marker, length: run.count)
+    }
+
+    private func isFenceClosing(_ line: String, for fence: MarkdownFence) -> Bool {
+        guard let contentStart = fenceContentStart(in: line), contentStart < line.endIndex,
+              line[contentStart] == fence.marker else { return false }
+        let run = characterRun(in: line, from: contentStart, character: fence.marker)
+        guard run.count >= fence.length else { return false }
+        return line[run.end...].allSatisfy { $0 == " " || $0 == "\t" }
+    }
+
+    private func fenceContentStart(in line: String) -> String.Index? {
+        var cursor = line.startIndex
+        var spaces = 0
+        while cursor < line.endIndex, line[cursor] == " " {
+            spaces += 1
+            guard spaces <= 3 else { return nil }
+            cursor = line.index(after: cursor)
+        }
+        if cursor < line.endIndex, line[cursor] == "\t" { return nil }
+        return cursor
     }
 
     private func processInline(
@@ -165,19 +221,25 @@ struct MarkupPreprocessor: Sendable {
         prefix: String,
         math: inout [MathReplacement],
         footnoteIDs: Set<String>,
-        referenceTokens: inout [String: String]
+        footnoteReferences: inout [FootnoteReference],
+        codeDelimiterLength: inout Int?,
+        lineNumber: Int,
+        codeSpanOpeners: Set<CodeDelimiterPosition>
     ) -> String {
         var result = ""
         var index = line.startIndex
-        var codeDelimiterLength: Int?
+        var runNumber = 0
 
         while index < line.endIndex {
             if line[index] == "`" {
                 let run = characterRun(in: line, from: index, character: "`")
                 result += String(line[index ..< run.end])
+                let position = CodeDelimiterPosition(line: lineNumber, run: runNumber)
+                runNumber += 1
                 if let delimiter = codeDelimiterLength {
+                    // Backslash escapes are not interpreted inside a CommonMark code span.
                     if run.count == delimiter { codeDelimiterLength = nil }
-                } else {
+                } else if codeSpanOpeners.contains(position) {
                     codeDelimiterLength = run.count
                 }
                 index = run.end
@@ -190,9 +252,12 @@ struct MarkupPreprocessor: Sendable {
                 continue
             }
 
-            if line[index] == "[", let reference = footnoteReference(in: line, from: index), footnoteIDs.contains(reference.id) {
-                let token = "\(prefix)FOOTNOTE_\(referenceTokens.count)_TOKEN"
-                referenceTokens[token] = reference.id
+            if line[index] == "[", !isEscaped(line, at: index),
+               let reference = footnoteReference(in: line, from: index),
+               footnoteIDs.contains(reference.id)
+            {
+                let token = "\(prefix)FOOTNOTE_\(footnoteReferences.count)_TOKEN"
+                footnoteReferences.append(.init(token: token, id: reference.id))
                 result += token
                 index = reference.end
                 continue
@@ -273,26 +338,40 @@ struct MarkupPreprocessor: Sendable {
         var output: [String] = []
         var footnotes: [Footnote] = []
         var index = 0
-        var inFence = false
-        var fenceMarker = ""
+        var activeFence: MarkdownFence?
+        var inlineCodeDelimiterLength: Int?
+        let codeSpanPlan = codeSpanPlan(in: lines)
 
         while index < lines.count {
+            let lineNumber = index
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if let marker = fenceStart(in: trimmed) {
-                if !inFence {
-                    inFence = true
-                    fenceMarker = marker
-                } else if trimmed.hasPrefix(fenceMarker) {
-                    inFence = false
-                    fenceMarker = ""
+            if codeSpanPlan.resetBeforeLines.contains(lineNumber) {
+                inlineCodeDelimiterLength = nil
+            }
+            defer {
+                if codeSpanPlan.resetAfterLines.contains(lineNumber) {
+                    inlineCodeDelimiterLength = nil
                 }
+            }
+            if let fence = activeFence {
+                if isFenceClosing(line, for: fence) { activeFence = nil }
+                output.append(line)
+                index += 1
+                continue
+            }
+            if let fence = fenceOpening(in: line) {
+                activeFence = fence
+                inlineCodeDelimiterLength = nil
                 output.append(line)
                 index += 1
                 continue
             }
 
-            if !inFence, let definition = footnoteDefinition(line) {
+            if trimmed.isEmpty { inlineCodeDelimiterLength = nil }
+            let startsInsideCodeSpan = inlineCodeDelimiterLength != nil
+            if !startsInsideCodeSpan, let definition = footnoteDefinition(line) {
+                inlineCodeDelimiterLength = nil
                 var body = [definition.body]
                 index += 1
                 while index < lines.count {
@@ -308,10 +387,350 @@ struct MarkupPreprocessor: Sendable {
                 continue
             }
 
+            updateInlineCodeDelimiter(
+                in: line,
+                lineNumber: lineNumber,
+                openers: codeSpanPlan.openers,
+                delimiterLength: &inlineCodeDelimiterLength
+            )
             output.append(line)
             index += 1
         }
         return (output.joined(separator: "\n"), footnotes)
+    }
+
+    private func updateInlineCodeDelimiter(
+        in line: String,
+        lineNumber: Int,
+        openers: Set<CodeDelimiterPosition>,
+        delimiterLength: inout Int?
+    ) {
+        var cursor = line.startIndex
+        var runNumber = 0
+        while cursor < line.endIndex {
+            guard line[cursor] == "`" else {
+                cursor = line.index(after: cursor)
+                continue
+            }
+            let run = characterRun(in: line, from: cursor, character: "`")
+            let position = CodeDelimiterPosition(line: lineNumber, run: runNumber)
+            runNumber += 1
+            if let activeDelimiter = delimiterLength {
+                if run.count == activeDelimiter { delimiterLength = nil }
+            } else if openers.contains(position) {
+                delimiterLength = run.count
+            }
+            cursor = run.end
+        }
+    }
+
+    /// CommonMark treats a backtick string as an opener only when a later string of exactly the
+    /// same length can close it in the same inline block. Precomputing those openers prevents an
+    /// unmatched literal backtick from suppressing extensions on every following source line.
+    private func codeSpanPlan(in lines: [String]) -> CodeSpanPlan {
+        var openers = Set<CodeDelimiterPosition>()
+        var resetBeforeLines = Set<Int>()
+        var resetAfterLines = Set<Int>()
+        var segment: [CodeDelimiterRun] = []
+        var segmentHasLines = false
+        var activeFence: MarkdownFence?
+        var activeQuoteDepth: Int?
+        var activeList = false
+
+        func finishSegment() {
+            if !segment.isEmpty {
+                var remaining: [Int: Int] = [:]
+                for run in segment { remaining[run.length, default: 0] += 1 }
+
+                var activeLength: Int?
+                for run in segment {
+                    remaining[run.length, default: 0] -= 1
+                    if let activeDelimiter = activeLength {
+                        if run.length == activeDelimiter { activeLength = nil }
+                    } else if !run.isEscaped,
+                              remaining[run.length, default: 0] > 0
+                    {
+                        openers.insert(run.position)
+                        activeLength = run.length
+                    }
+                }
+            }
+            segment.removeAll(keepingCapacity: true)
+            segmentHasLines = false
+        }
+
+        func appendRuns(in line: String, lineNumber: Int) {
+            segmentHasLines = true
+            var cursor = line.startIndex
+            var runNumber = 0
+            while cursor < line.endIndex {
+                guard line[cursor] == "`" else {
+                    cursor = line.index(after: cursor)
+                    continue
+                }
+                let run = characterRun(in: line, from: cursor, character: "`")
+                segment.append(.init(
+                    position: .init(line: lineNumber, run: runNumber),
+                    length: run.count,
+                    isEscaped: isEscaped(line, at: cursor)
+                ))
+                runNumber += 1
+                cursor = run.end
+            }
+        }
+
+        func isolateLine(_ line: String, lineNumber: Int, scansInlineContent: Bool) {
+            finishSegment()
+            resetBeforeLines.insert(lineNumber)
+            if scansInlineContent { appendRuns(in: line, lineNumber: lineNumber) }
+            finishSegment()
+            resetAfterLines.insert(lineNumber)
+        }
+
+        for (lineNumber, line) in lines.enumerated() {
+            if let fence = activeFence {
+                resetBeforeLines.insert(lineNumber)
+                resetAfterLines.insert(lineNumber)
+                if isFenceClosing(line, for: fence) {
+                    activeFence = nil
+                    activeQuoteDepth = nil
+                    activeList = false
+                }
+                continue
+            }
+            if let fence = fenceOpening(in: line) {
+                finishSegment()
+                resetBeforeLines.insert(lineNumber)
+                resetAfterLines.insert(lineNumber)
+                activeFence = fence
+                activeQuoteDepth = nil
+                activeList = false
+                continue
+            }
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                finishSegment()
+                resetBeforeLines.insert(lineNumber)
+                resetAfterLines.insert(lineNumber)
+                activeQuoteDepth = nil
+                activeList = false
+                continue
+            }
+            if footnoteDefinition(line) != nil {
+                isolateLine(line, lineNumber: lineNumber, scansInlineContent: false)
+                activeQuoteDepth = nil
+                activeList = false
+                continue
+            }
+
+            let structure = markdownBlockStructure(in: line)
+            if let quoteDepth = structure.explicitQuoteDepth {
+                if quoteDepth != activeQuoteDepth {
+                    finishSegment()
+                    resetBeforeLines.insert(lineNumber)
+                    activeList = false
+                }
+                activeQuoteDepth = quoteDepth
+            }
+
+            let startsListItem = structure.listMarker.map {
+                !segmentHasLines || activeList || $0.canInterruptParagraph
+            } ?? false
+            if startsListItem {
+                finishSegment()
+                resetBeforeLines.insert(lineNumber)
+                if structure.explicitQuoteDepth == nil { activeQuoteDepth = nil }
+                activeList = true
+            }
+
+            let contentStart = startsListItem
+                ? structure.contentStart
+                : structure.contentStartBeforeListMarker
+            let content = line[contentStart...]
+            if isATXHeading(content) {
+                isolateLine(line, lineNumber: lineNumber, scansInlineContent: true)
+                activeQuoteDepth = nil
+                if structure.listMarker == nil { activeList = false }
+                continue
+            }
+            if isThematicBreak(content) || isSetextUnderline(content) {
+                isolateLine(line, lineNumber: lineNumber, scansInlineContent: false)
+                activeQuoteDepth = nil
+                if structure.listMarker == nil { activeList = false }
+                continue
+            }
+            if structure.isIndentedCodeCandidate, !segmentHasLines {
+                isolateLine(line, lineNumber: lineNumber, scansInlineContent: false)
+                activeQuoteDepth = nil
+                activeList = false
+                continue
+            }
+
+            appendRuns(in: line, lineNumber: lineNumber)
+        }
+        finishSegment()
+        return CodeSpanPlan(
+            openers: openers,
+            resetBeforeLines: resetBeforeLines,
+            resetAfterLines: resetAfterLines
+        )
+    }
+
+    private func markdownBlockStructure(in line: String) -> MarkdownBlockStructure {
+        var cursor = line.startIndex
+        let initialIndent = leadingIndent(in: line, from: cursor, limit: 4)
+        let isIndentedCodeCandidate = initialIndent.width >= 4 || initialIndent.sawTab
+        cursor = initialIndent.width <= 3 && !initialIndent.sawTab ? initialIndent.end : line.startIndex
+
+        var quoteDepth = 0
+        while cursor < line.endIndex, line[cursor] == ">" {
+            quoteDepth += 1
+            cursor = line.index(after: cursor)
+            if cursor < line.endIndex, line[cursor] == " " || line[cursor] == "\t" {
+                cursor = line.index(after: cursor)
+            }
+
+            let beforeNestedIndent = cursor
+            let nestedIndent = leadingIndent(in: line, from: cursor, limit: 3)
+            if !nestedIndent.sawTab,
+               nestedIndent.width <= 3,
+               nestedIndent.end < line.endIndex,
+               line[nestedIndent.end] == ">"
+            {
+                cursor = nestedIndent.end
+            } else {
+                cursor = beforeNestedIndent
+                break
+            }
+        }
+
+        let listIndent = leadingIndent(in: line, from: cursor, limit: 3)
+        if !listIndent.sawTab, listIndent.width <= 3 { cursor = listIndent.end }
+        let contentStartBeforeListMarker = cursor
+        let listMarker = listMarker(in: line, at: cursor)
+        if let listMarker {
+            cursor = listMarker.end
+            if cursor < line.endIndex, line[cursor] == " " || line[cursor] == "\t" {
+                cursor = line.index(after: cursor)
+            }
+        }
+
+        return MarkdownBlockStructure(
+            contentStart: cursor,
+            contentStartBeforeListMarker: contentStartBeforeListMarker,
+            explicitQuoteDepth: quoteDepth == 0 ? nil : quoteDepth,
+            listMarker: listMarker,
+            isIndentedCodeCandidate: isIndentedCodeCandidate && quoteDepth == 0 && listMarker == nil
+        )
+    }
+
+    private func leadingIndent(
+        in line: String,
+        from start: String.Index,
+        limit: Int
+    ) -> (end: String.Index, width: Int, sawTab: Bool) {
+        var cursor = start
+        var width = 0
+        while cursor < line.endIndex, width <= limit {
+            if line[cursor] == " " {
+                width += 1
+                cursor = line.index(after: cursor)
+            } else if line[cursor] == "\t" {
+                return (line.index(after: cursor), limit + 1, true)
+            } else {
+                break
+            }
+        }
+        return (cursor, width, false)
+    }
+
+    private func listMarker(in line: String, at start: String.Index) -> MarkdownListMarker? {
+        guard start < line.endIndex else { return nil }
+        if line[start] == "-" || line[start] == "+" || line[start] == "*" {
+            let end = line.index(after: start)
+            guard end == line.endIndex || line[end] == " " || line[end] == "\t" else {
+                return nil
+            }
+            return .init(
+                end: end,
+                canInterruptParagraph: hasNonblankListContent(in: line, after: end)
+            )
+        }
+
+        var cursor = start
+        var digitCount = 0
+        while cursor < line.endIndex,
+              digitCount < 9,
+              isASCIIListDigit(line[cursor])
+        {
+            digitCount += 1
+            cursor = line.index(after: cursor)
+        }
+        guard digitCount > 0,
+              cursor < line.endIndex,
+              line[cursor] == "." || line[cursor] == ")"
+        else { return nil }
+        let end = line.index(after: cursor)
+        guard end == line.endIndex || line[end] == " " || line[end] == "\t" else { return nil }
+        let startNumber = Int(line[start ..< cursor])
+        return .init(
+            end: end,
+            canInterruptParagraph: startNumber == 1
+                && hasNonblankListContent(in: line, after: end)
+        )
+    }
+
+    private func hasNonblankListContent(in line: String, after markerEnd: String.Index) -> Bool {
+        var cursor = markerEnd
+        while cursor < line.endIndex, line[cursor] == " " || line[cursor] == "\t" {
+            cursor = line.index(after: cursor)
+        }
+        return cursor < line.endIndex
+    }
+
+    private func isASCIIListDigit(_ character: Character) -> Bool {
+        guard character.unicodeScalars.count == 1,
+              let scalar = character.unicodeScalars.first
+        else { return false }
+        return (0x30...0x39).contains(scalar.value)
+    }
+
+    private func isATXHeading(_ content: Substring) -> Bool {
+        var cursor = content.startIndex
+        var indent = 0
+        while cursor < content.endIndex, content[cursor] == " ", indent < 4 {
+            indent += 1
+            cursor = content.index(after: cursor)
+        }
+        guard indent <= 3 else { return false }
+        var markerCount = 0
+        while cursor < content.endIndex, content[cursor] == "#", markerCount < 7 {
+            markerCount += 1
+            cursor = content.index(after: cursor)
+        }
+        guard (1...6).contains(markerCount) else { return false }
+        return cursor == content.endIndex || content[cursor] == " " || content[cursor] == "\t"
+    }
+
+    private func isSetextUnderline(_ content: Substring) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespaces)
+        guard let marker = trimmed.first, marker == "=" || marker == "-" else { return false }
+        return trimmed.allSatisfy { $0 == marker }
+    }
+
+    private func isThematicBreak(_ content: Substring) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespaces)
+        guard let marker = trimmed.first, marker == "*" || marker == "-" || marker == "_" else {
+            return false
+        }
+        var markerCount = 0
+        for character in trimmed {
+            if character == marker {
+                markerCount += 1
+            } else if character != " " && character != "\t" {
+                return false
+            }
+        }
+        return markerCount >= 3
     }
 
     private func footnoteDefinition(_ line: String) -> (id: String, body: String)? {
@@ -325,4 +744,39 @@ struct MarkupPreprocessor: Sendable {
         let bodyStart = line.index(after: after)
         return (id, String(line[bodyStart...]).trimmingCharacters(in: .whitespaces))
     }
+}
+
+private struct MarkdownFence {
+    let marker: Character
+    let length: Int
+}
+
+private struct CodeDelimiterPosition: Hashable {
+    let line: Int
+    let run: Int
+}
+
+private struct CodeDelimiterRun {
+    let position: CodeDelimiterPosition
+    let length: Int
+    let isEscaped: Bool
+}
+
+private struct CodeSpanPlan {
+    let openers: Set<CodeDelimiterPosition>
+    let resetBeforeLines: Set<Int>
+    let resetAfterLines: Set<Int>
+}
+
+private struct MarkdownBlockStructure {
+    let contentStart: String.Index
+    let contentStartBeforeListMarker: String.Index
+    let explicitQuoteDepth: Int?
+    let listMarker: MarkdownListMarker?
+    let isIndentedCodeCandidate: Bool
+}
+
+private struct MarkdownListMarker {
+    let end: String.Index
+    let canInterruptParagraph: Bool
 }

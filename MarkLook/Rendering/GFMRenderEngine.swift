@@ -81,20 +81,22 @@ actor GFMRenderEngine: RenderEngine {
             html = html.replacingOccurrences(of: replacement.token, with: element)
         }
 
+        let footnoteAnchorIDs = collisionSafeFootnoteAnchorIDs(for: processed.footnotes)
         var referenceCounts: [String: Int] = [:]
-        for (token, id) in processed.footnoteReferenceTokens {
+        for referenceReplacement in processed.footnoteReferences {
+            let id = referenceReplacement.id
             let index = referenceCounts[id, default: 0] + 1
             referenceCounts[id] = index
-            let safeID = anchorID(id)
+            let safeID = footnoteAnchorIDs[id] ?? anchorID(id)
             let referenceID = index == 1 ? "fnref-\(safeID)" : "fnref-\(safeID)-\(index)"
             let reference = "<sup id=\"\(referenceID)\" class=\"footnote-ref\"><a href=\"#fn-\(safeID)\" aria-label=\"Footnote \(HTMLEscaping.attribute(id))\">\(HTMLEscaping.text(id))</a></sup>"
-            html = html.replacingOccurrences(of: token, with: reference)
+            html = html.replacingOccurrences(of: referenceReplacement.token, with: reference)
         }
 
         if !processed.footnotes.isEmpty {
             html += "<section class=\"footnotes\" aria-label=\"Footnotes\"><hr><ol>"
             for (footnote, footnoteDocument) in footnoteDocuments {
-                let safeID = anchorID(footnote.id)
+                let safeID = footnoteAnchorIDs[footnote.id] ?? anchorID(footnote.id)
                 let content: String
                 if requiresFullSanitization {
                     content = SecureHTMLFormatter.format(
@@ -190,6 +192,33 @@ actor GFMRenderEngine: RenderEngine {
         }
         if !readable.isEmpty { return readable }
         return SHA256.hash(data: Data(input.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func collisionSafeFootnoteAnchorIDs(
+        for footnotes: [MarkupPreprocessor.Footnote]
+    ) -> [String: String] {
+        var result: [String: String] = [:]
+        var used = Set<String>()
+
+        for footnote in footnotes where result[footnote.id] == nil {
+            let base = anchorID(footnote.id)
+            var candidate = base
+            if used.contains(candidate) {
+                let hash = SHA256.hash(data: Data(footnote.id.utf8))
+                    .prefix(6)
+                    .map { String(format: "%02x", $0) }
+                    .joined()
+                candidate = "\(base)-\(hash)"
+                var ordinal = 2
+                while used.contains(candidate) {
+                    candidate = "\(base)-\(hash)-\(ordinal)"
+                    ordinal += 1
+                }
+            }
+            result[footnote.id] = candidate
+            used.insert(candidate)
+        }
+        return result
     }
 
     private func containsMeaningfulRawHTML(in markup: Markup) -> Bool {

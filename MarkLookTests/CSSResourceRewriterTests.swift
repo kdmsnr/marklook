@@ -111,6 +111,77 @@ final class CSSResourceRewriterTests: XCTestCase {
         XCTAssertTrue(output.contains("background: white"))
     }
 
+    func testURLAndImportTextInsideCommentsAndStringsIsPreserved() throws {
+        let css = """
+        /* background: url(../outside/comment.png); */
+        /* @import "comment.css"; */
+        .label::before { content: "url(literal.png)"; }
+        .label::after { content: '@import "literal.css";'; }
+        .hero { background: url(real.png); }
+        """
+
+        let output = rewriter.rewrite(
+            css,
+            stylesheetURL: stylesheetURL,
+            resourceAuthority: authority
+        )
+
+        XCTAssertTrue(output.contains("/* background: url(../outside/comment.png); */"), output)
+        XCTAssertTrue(output.contains("/* @import \"comment.css\"; */"), output)
+        XCTAssertTrue(output.contains("content: \"url(literal.png)\""), output)
+        XCTAssertTrue(output.contains("content: '@import \"literal.css\";'"), output)
+        let resourceURLs = try extractedResourceURLs(from: output)
+        XCTAssertEqual(resourceURLs.count, 1)
+        let resourceURL = try XCTUnwrap(resourceURLs.first)
+        XCTAssertEqual(
+            try sourceQueryItem(from: resourceURL),
+            "file:///tmp/MarkLook%20CSS/styles/real.png"
+        )
+    }
+
+    func testUnquotedEscapedSpaceResolvesToFileContainingSpace() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let stylesDirectory = temporaryDirectory.appendingPathComponent("styles", isDirectory: true)
+        let imageURL = stylesDirectory.appendingPathComponent("hero image.png")
+        try FileManager.default.createDirectory(
+            at: stylesDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let output = rewriter.rewrite(
+            #".hero { background-image: url(hero\ image.png); }"#,
+            stylesheetURL: stylesDirectory.appendingPathComponent("theme.css"),
+            resourceAuthority: authority
+        )
+
+        let resourceURLs = try extractedResourceURLs(from: output)
+        XCTAssertEqual(resourceURLs.count, 1)
+        let resourceURL = try XCTUnwrap(resourceURLs.first)
+        let source = try sourceQueryItem(from: resourceURL)
+        let resolvedFileURL = try XCTUnwrap(URL(string: source))
+        XCTAssertEqual(resolvedFileURL.path, imageURL.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: resolvedFileURL.path))
+    }
+
+    func testHexadecimalCSSEscapeIsDecodedBeforeURLResolution() throws {
+        let output = rewriter.rewrite(
+            #".hero { background-image: url(hero\20 image.png); }"#,
+            stylesheetURL: stylesheetURL,
+            resourceAuthority: authority
+        )
+
+        let resourceURLs = try extractedResourceURLs(from: output)
+        XCTAssertEqual(resourceURLs.count, 1)
+        let resourceURL = try XCTUnwrap(resourceURLs.first)
+        XCTAssertEqual(
+            try sourceQueryItem(from: resourceURL),
+            "file:///tmp/MarkLook%20CSS/styles/hero%20image.png"
+        )
+    }
+
     private func extractedResourceURLs(from css: String) throws -> [URL] {
         let expression = try NSRegularExpression(pattern: #"mark-resource://[^\"')\s]+"#)
         let range = NSRange(css.startIndex..<css.endIndex, in: css)

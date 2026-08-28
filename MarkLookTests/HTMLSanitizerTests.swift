@@ -160,6 +160,123 @@ final class HTMLSanitizerTests: XCTestCase {
         XCTAssertEqual(result.resources.map(\.source), ["images/background.png"])
     }
 
+    func testHeadStylesKeepTheirOriginalCascadeOrderWhenMovedIntoFragment() throws {
+        let source = """
+        <html><head>
+          <style id="first">p { color: red; }</style>
+          <style id="second">p { color: blue; }</style>
+        </head><body><p>text</p></body></html>
+        """
+
+        let output = try sanitizer.sanitize(source, context: context).fragment
+        let first = try XCTUnwrap(output.range(of: "id=\"first\""))
+        let second = try XCTUnwrap(output.range(of: "id=\"second\""))
+
+        XCTAssertLessThan(first.lowerBound, second.lowerBound, output)
+    }
+
+    func testCSSURLTextInsideCommentsAndStringsDoesNotCreateResources() throws {
+        let source = #"""
+        <style>
+          /* background: url(images/commented.png); */
+          p::before { content: "url(literal.png)"; }
+          p { background: url(images/real.png); }
+        </style>
+        <p>text</p>
+        """#
+
+        let result = try sanitizer.sanitize(source, context: context)
+
+        XCTAssertEqual(result.resources.map(\.source), ["images/real.png"])
+        XCTAssertTrue(result.fragment.contains("url(images/commented.png)"), result.fragment)
+        XCTAssertTrue(result.fragment.contains(#"content: "url(literal.png)""#), result.fragment)
+        XCTAssertTrue(
+            result.fragment.contains("mark-resource://document-session/open?source=images/real.png"),
+            result.fragment
+        )
+    }
+
+    func testCSSImportTextInsideCommentsAndStringsIsPreservedWhileRulesAreRemoved() throws {
+        let source = #"""
+        <style>
+          /* @import "comment-literal.css"; */
+          p::before { content: '@import "string-literal.css";'; }
+          @import url("images/actual-import.css") screen;
+          @\69mport "images/escaped-import.css";
+          p { color: green; }
+        </style>
+        <p>text</p>
+        """#
+
+        let result = try sanitizer.sanitize(source, context: context)
+
+        XCTAssertTrue(
+            result.fragment.contains("/* @import \"comment-literal.css\"; */"),
+            result.fragment
+        )
+        XCTAssertTrue(
+            result.fragment.contains("content: '@import \"string-literal.css\";'"),
+            result.fragment
+        )
+        XCTAssertFalse(result.fragment.contains("actual-import.css"), result.fragment)
+        XCTAssertFalse(result.fragment.contains("escaped-import.css"), result.fragment)
+        XCTAssertTrue(result.fragment.contains("color: green"), result.fragment)
+        XCTAssertTrue(result.resources.isEmpty)
+    }
+
+    func testCSSImportRemovalOnlyAppliesToTopLevelStylesheetRules() throws {
+        let source = #"""
+        <style>
+          <!--
+          @import "legacy-wrapper-import.css";
+          -->
+          @import url("actual-import.css") screen;
+          @unknown fn(@import paren-token) [@import bracket-token];
+          @unknown @import at-rule-prelude-token;
+          .card {
+            --message: @import custom-property-token;
+            background-image: url(@import.png);
+          }
+        </style>
+        <p style="--inline-message: @import inline-token; background-image: url(@inline-import.png)">text</p>
+        """#
+
+        let result = try sanitizer.sanitize(source, context: context)
+
+        XCTAssertFalse(result.fragment.contains("actual-import.css"), result.fragment)
+        XCTAssertFalse(result.fragment.contains("legacy-wrapper-import.css"), result.fragment)
+        XCTAssertTrue(
+            result.fragment.contains("fn(@import paren-token) [@import bracket-token]"),
+            result.fragment
+        )
+        XCTAssertTrue(
+            result.fragment.contains("@unknown @import at-rule-prelude-token"),
+            result.fragment
+        )
+        XCTAssertTrue(
+            result.fragment.contains("--message: @import custom-property-token"),
+            result.fragment
+        )
+        XCTAssertTrue(
+            result.fragment.contains("--inline-message: @import inline-token"),
+            result.fragment
+        )
+        XCTAssertEqual(
+            Set(result.resources.map(\.source)),
+            Set(["@import.png", "@inline-import.png"])
+        )
+    }
+
+    func testCSSEscapedSpaceResolvesToSpaceInLocalFilename() throws {
+        let source = #"<style>p { background: url(images/hero\ image.png); }</style>"#
+
+        let result = try sanitizer.sanitize(source, context: context)
+        let resource = try XCTUnwrap(result.resources.first)
+
+        XCTAssertEqual(resource.source, "images/hero image.png")
+        XCTAssertEqual(resource.resolvedURL?.path, "/tmp/MarkLook Tests/images/hero image.png")
+    }
+
     func testPercentEncodedFilenameIsResolvedWithoutTreatingDecodedHashAsFragment() throws {
         let source = #"<img src="images/asset%23one.png?cache=1#preview">"#
 

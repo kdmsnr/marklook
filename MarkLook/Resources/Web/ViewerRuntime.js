@@ -319,7 +319,7 @@
 
   function restoreScroll(snapshot, explicitAnchor) {
     const scrollElement = document.scrollingElement || document.documentElement;
-    const requested = elementForAnchor(explicitAnchor || snapshot.fragment);
+    const requested = elementForAnchor(explicitAnchor);
     if (requested) {
       requested.scrollIntoView({ block: "start" });
       return;
@@ -363,7 +363,15 @@
         state.generation = argumentsObject.generation;
         state.layoutVersion += 1;
         const layoutVersion = state.layoutVersion;
-        const snapshot = state.firstRender
+        const preserveScroll = Boolean(argumentsObject.preserveScroll);
+        const explicitAnchor = preserveScroll ? null : argumentsObject.explicitAnchor || null;
+        if (!preserveScroll) {
+          const nextURL = explicitAnchor
+            ? `#${encodeURIComponent(explicitAnchor)}`
+            : location.href.split("#", 1)[0];
+          history.replaceState(null, "", nextURL);
+        }
+        const snapshot = state.firstRender || !preserveScroll
           ? { anchor: null, offset: 0, ratio: 0, atBottom: false, fragment: null }
           : captureScroll();
         const interactionVersion = state.interactionVersion;
@@ -381,7 +389,7 @@
         await nextFrame();
         if (argumentsObject.generation !== state.generation) return { stale: true, warnings: [] };
         if (state.interactionVersion === interactionVersion && state.layoutVersion === layoutVersion) {
-          restoreScroll(snapshot, argumentsObject.explicitAnchor || null);
+          restoreScroll(snapshot, explicitAnchor);
         }
         await nextFrame();
         if (argumentsObject.generation !== state.generation) return { stale: true, warnings: [] };
@@ -390,7 +398,7 @@
         state.firstRender = false;
         void settleLayout(
           snapshot,
-          argumentsObject.explicitAnchor || null,
+          explicitAnchor,
           state.generation,
           interactionVersion,
           layoutVersion

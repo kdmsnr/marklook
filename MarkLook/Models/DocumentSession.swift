@@ -24,14 +24,11 @@ final class DocumentSession {
     @ObservationIgnored private let renderer: any RenderEngine
     @ObservationIgnored private let bookmarkStore: BookmarkStore
     @ObservationIgnored private let recentDocuments: RecentDocuments
-    @ObservationIgnored private let dependencyTracker: DependencyTracker
     @ObservationIgnored private let rootDocumentURL: URL
     @ObservationIgnored private var scopes: [LocalResourceScope]
     @ObservationIgnored private var leases: [SecurityScopedLease]
     @ObservationIgnored private var scheduler: ReloadScheduler<PreparedDocument>?
     @ObservationIgnored private var documentWatcher: DirectoryWatcher?
-    @ObservationIgnored private var dependencyWatchers: [URL: DirectoryWatcher] = [:]
-    @ObservationIgnored private var dependencyFingerprints: [URL: ContentFingerprint] = [:]
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var spinnerTask: Task<Void, Never>?
     @ObservationIgnored private var activityToken = UUID()
@@ -66,7 +63,6 @@ final class DocumentSession {
         self.recentDocuments = recentDocuments
         self.markdownLineBreakMode = markdownLineBreakMode
         self.remoteContentPolicy = remoteContentPolicy
-        dependencyTracker = DependencyTracker()
         rootDocumentURL = rootURL
         resourceAuthority = UUID().uuidString.lowercased()
         backHistory = restoredNavigation?.backHistory ?? []
@@ -74,15 +70,18 @@ final class DocumentSession {
 
         let restored = bookmarkStore.resolveAll()
         let directURLs = Set([rootURL, initialURL].map(Self.fileAccessURL))
-        leases = restored.leases + directURLs.map(SecurityScopedLease.init(url:))
-        scopes = restored.scopes + directURLs.map(LocalResourceScope.file)
+        leases = Self.deduplicatedLeases(
+            restored.leases + directURLs.map(SecurityScopedLease.init(url:))
+        )
+        scopes = Self.deduplicatedScopes(
+            restored.scopes + directURLs.map(LocalResourceScope.file)
+        )
         zoom = Self.persistedZoom(for: initialURL)
 
         webViewStore = WebViewStore(
             documentURL: initialURL,
             scopes: scopes,
             resourceAuthority: resourceAuthority,
-            dependencyLoaded: { [dependencyTracker] url in dependencyTracker.record(url) },
             remoteContentPolicy: remoteContentPolicy
         )
         webViewStore.setZoom(zoom)
@@ -92,10 +91,6 @@ final class DocumentSession {
         webViewStore.onNavigationFailure = { [weak self] message in
             self?.showOverlay(kind: .rendering, title: "Display Error", message: message)
         }
-        dependencyTracker.onNewDependency { [weak self] url in
-            Task { @MainActor in self?.watchDependency(url) }
-        }
-
         try? bookmarkStore.save(Self.fileAccessURL(rootURL), asFolder: false)
         if initialURL.path != rootURL.path {
             try? bookmarkStore.save(Self.fileAccessURL(initialURL), asFolder: false)
@@ -219,6 +214,7 @@ final class DocumentSession {
     }
 
     func locateFile() {
+        let missingURL = currentURL
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -228,7 +224,9 @@ final class DocumentSession {
         panel.prompt = "Locate"
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in self?.openFile(url, recordingHistory: true) }
+            Task { @MainActor in
+                self?.relocateFile(to: url, replacing: missingURL)
+            }
         }
     }
 
@@ -248,11 +246,12 @@ final class DocumentSession {
     }
 
     func openDroppedFile(_ url: URL) {
-        if (try? DocumentFormat(url: url)) != nil {
-            openFile(url, recordingHistory: true)
-        } else {
+        guard let route = ViewerWindowRoute.viewing(url),
+              let documentURL = route.documentURL else {
             NSWorkspace.shared.open(url)
+            return
         }
+        openFile(documentURL, recordingHistory: true)
     }
 
     func consumeOpenDocumentRequest() {
@@ -375,10 +374,18 @@ final class DocumentSession {
             else { return }
             do {
                 let webStartedAt = ContinuousClock().now
+                let preserveScroll = DocumentUpdatePolicy.preservesScroll(
+                    displayedURL: displayedURL,
+                    currentURL: currentURL
+                )
                 let result = try await webViewStore.apply(
                     output: snapshot.output.renderOutput,
                     generation: presentationTicket.webGeneration,
-                    explicitAnchor: currentURL.fragment
+                    explicitAnchor: DocumentUpdatePolicy.explicitAnchor(
+                        for: currentURL,
+                        preservingScroll: preserveScroll
+                    ),
+                    preserveScroll: preserveScroll
                 )
                 let webRoundTrip = webStartedAt.duration(to: ContinuousClock().now)
                 let isCurrentSchedulerGeneration = await scheduler.isCurrent(snapshot.generation)
@@ -409,7 +416,8 @@ final class DocumentSession {
                 finishActivity()
                 if !didRestoreScroll {
                     didRestoreScroll = true
-                    if let savedState = Self.persistedScroll(for: currentURL) {
+                    if currentURL.fragment == nil,
+                       let savedState = Self.persistedScroll(for: currentURL) {
                         await webViewStore.restoreScrollState(savedState)
                     }
                 }
@@ -421,6 +429,10 @@ final class DocumentSession {
             }
 
         case .unchanged:
+            issue = DocumentUpdatePolicy.issueAfterUnchangedReload(
+                currentIssue: issue,
+                monitoringIssue: monitoringIssue
+            )
             finishActivity()
 
         case let .failed(failure):
@@ -471,7 +483,8 @@ final class DocumentSession {
     private func openFile(
         _ url: URL,
         recordingHistory: Bool,
-        checkingWindowIdentity: Bool = true
+        checkingWindowIdentity: Bool = true,
+        replacingRecentURL: URL? = nil
     ) {
         let normalized = Self.normalizedDocumentURL(url)
         if checkingWindowIdentity,
@@ -484,14 +497,13 @@ final class DocumentSession {
         }
         currentURL = normalized
         let accessURL = Self.fileAccessURL(normalized)
-        scopes.append(.file(accessURL))
-        leases.append(SecurityScopedLease(url: accessURL))
+        retainAccess(to: accessURL, asFolder: false)
         try? bookmarkStore.save(accessURL, asFolder: false)
-        recentDocuments.note(accessURL)
+        recentDocuments.note(accessURL, replacing: replacingRecentURL)
         webViewStore.updateAccess(documentURL: normalized, scopes: scopes)
-        dependencyTracker.reset()
+        zoom = Self.persistedZoom(for: normalized)
+        webViewStore.setZoom(zoom)
         didRestoreScroll = false
-        cancelDependencyWatchers()
         updateHistoryFlags()
         persistNavigation()
         configureReloadPipeline()
@@ -501,11 +513,25 @@ final class DocumentSession {
         shouldOpenInCurrentWindow?(currentURL, Self.normalizedDocumentURL(url)) ?? true
     }
 
+    func relocateFile(to url: URL, replacing missingURL: URL) {
+        let normalized = Self.normalizedDocumentURL(url)
+        guard Self.isSupportedDocumentURL(normalized),
+              canOpenInCurrentWindow(normalized) else { return }
+        let missingAccessURL = Self.fileAccessURL(missingURL)
+        backHistory.removeAll { Self.fileAccessURL($0) == missingAccessURL }
+        forwardHistory.removeAll { Self.fileAccessURL($0) == missingAccessURL }
+        openFile(
+            normalized,
+            recordingHistory: false,
+            checkingWindowIdentity: false,
+            replacingRecentURL: missingAccessURL
+        )
+    }
+
     private func didGrant(folder: URL) {
         do {
             try bookmarkStore.save(folder, asFolder: true)
-            scopes.append(.folder(folder))
-            leases.append(SecurityScopedLease(url: folder))
+            retainAccess(to: folder, asFolder: true)
             webViewStore.updateAccess(documentURL: currentURL, scopes: scopes)
             issue = nil
             if let pendingNavigationSource {
@@ -521,40 +547,6 @@ final class DocumentSession {
             }
         } catch {
             showOverlay(kind: .permission, title: "Access Was Not Saved", message: error.localizedDescription)
-        }
-    }
-
-    private func watchDependency(_ url: URL) {
-        guard dependencyWatchers[url] == nil else { return }
-        if let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
-            dependencyFingerprints[url] = ContentFingerprint(data: data)
-        }
-        do {
-            let watcher = try DirectoryWatcher(fileURL: url)
-            try watcher.start { [weak self] _ in
-                Task { @MainActor in self?.dependencyMayHaveChanged(url) }
-            }
-            dependencyWatchers[url] = watcher
-        } catch {
-            warnings.append(.init(message: "Could not monitor \(url.lastPathComponent): \(error.localizedDescription)"))
-        }
-    }
-
-    private func dependencyMayHaveChanged(_ url: URL) {
-        Task.detached(priority: .utility) { [weak self] in
-            let data = try? Data(contentsOf: url, options: .mappedIfSafe)
-            let fingerprint = data.map(ContentFingerprint.init(data:))
-            await MainActor.run {
-                guard let self, self.dependencyFingerprints[url] != fingerprint else { return }
-                self.dependencyFingerprints[url] = fingerprint
-                let sources = self.currentResources
-                    .filter { $0.resolvedURL?.standardizedFileURL == url.standardizedFileURL }
-                    .map(\.source) + [url.absoluteString]
-                Task {
-                    let revision = self.nextResourceRevision()
-                    await self.webViewStore.invalidateResources(sources, revision: revision)
-                }
-            }
         }
     }
 
@@ -635,10 +627,15 @@ final class DocumentSession {
         scheduler = nil
     }
 
-    private func cancelDependencyWatchers() {
-        dependencyWatchers.values.forEach { $0.cancel() }
-        dependencyWatchers.removeAll()
-        dependencyFingerprints.removeAll()
+    private func retainAccess(to url: URL, asFolder: Bool) {
+        let normalized = Self.fileAccessURL(url)
+        let scope: LocalResourceScope = asFolder ? .folder(normalized) : .file(normalized)
+        if !scopes.contains(scope) {
+            scopes.append(scope)
+        }
+        if !leases.contains(where: { Self.fileAccessURL($0.url) == normalized }) {
+            leases.append(SecurityScopedLease(url: normalized))
+        }
     }
 
     private func updateHistoryFlags() {
@@ -679,6 +676,28 @@ final class DocumentSession {
         components.fragment = nil
         components.query = nil
         return components.url?.standardizedFileURL ?? url.standardizedFileURL
+    }
+
+    private static func deduplicatedScopes(
+        _ candidates: [LocalResourceScope]
+    ) -> [LocalResourceScope] {
+        var seen = Set<LocalResourceScope>()
+        return candidates.compactMap { scope in
+            let normalized: LocalResourceScope = switch scope {
+            case let .file(url): .file(fileAccessURL(url))
+            case let .folder(url): .folder(fileAccessURL(url))
+            }
+            return seen.insert(normalized).inserted ? normalized : nil
+        }
+    }
+
+    private static func deduplicatedLeases(
+        _ candidates: [SecurityScopedLease]
+    ) -> [SecurityScopedLease] {
+        var seen = Set<URL>()
+        return candidates.filter { lease in
+            seen.insert(fileAccessURL(lease.url)).inserted
+        }
     }
 
     private static func persistedNavigation(for rootURL: URL) -> PersistedNavigationState? {
@@ -739,7 +758,6 @@ final class DocumentSession {
         eventTask?.cancel()
         spinnerTask?.cancel()
         documentWatcher?.cancel()
-        dependencyWatchers.values.forEach { $0.cancel() }
         if let scheduler { Task { await scheduler.cancel() } }
     }
 }

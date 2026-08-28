@@ -397,16 +397,18 @@ final class DirectoryWatcher: @unchecked Sendable {
         scheduleTargetReattachment(
             watchToken: expectedWatchToken,
             retryToken: retryToken,
-            remainingAttempts: 20
+            remainingRapidAttempts: 20,
+            delayMilliseconds: 25
         )
     }
 
     private func scheduleTargetReattachment(
         watchToken expectedWatchToken: UUID,
         retryToken expectedRetryToken: UUID,
-        remainingAttempts: Int
+        remainingRapidAttempts: Int,
+        delayMilliseconds: Int
     ) {
-        queue.asyncAfter(deadline: .now() + .milliseconds(25)) { [weak self] in
+        queue.asyncAfter(deadline: .now() + .milliseconds(delayMilliseconds)) { [weak self] in
             guard let self else { return }
             let isCurrent = self.lock.withLock {
                 self.watchToken == expectedWatchToken
@@ -418,18 +420,21 @@ final class DirectoryWatcher: @unchecked Sendable {
                 return
             }
 
-            guard remainingAttempts > 1 else {
-                self.lock.withLock {
-                    if self.targetRetryToken == expectedRetryToken {
-                        self.targetRetryToken = nil
-                    }
-                }
-                return
+            let nextRapidAttempts = max(0, remainingRapidAttempts - 1)
+            // Keep the 25 ms retry cadence for ordinary atomic saves, then back off instead of
+            // abandoning a target-only watcher. A file-scoped sandbox grant can deny access to the
+            // parent directory, leaving this retry as the only way to observe a later replacement
+            // inode. The retry token makes the chain stop promptly on cancellation or success.
+            let nextDelayMilliseconds = if remainingRapidAttempts > 1 {
+                25
+            } else {
+                min(max(delayMilliseconds * 2, 500), 5_000)
             }
             self.scheduleTargetReattachment(
                 watchToken: expectedWatchToken,
                 retryToken: expectedRetryToken,
-                remainingAttempts: remainingAttempts - 1
+                remainingRapidAttempts: nextRapidAttempts,
+                delayMilliseconds: nextDelayMilliseconds
             )
         }
     }

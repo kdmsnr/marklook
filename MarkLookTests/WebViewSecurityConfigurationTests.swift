@@ -10,8 +10,7 @@ final class WebViewSecurityConfigurationTests: XCTestCase {
         let store = WebViewStore(
             documentURL: documentURL,
             scopes: [.file(documentURL)],
-            resourceAuthority: "web-session",
-            dependencyLoaded: { _ in }
+            resourceAuthority: "web-session"
         )
         let configuration = store.webView.configuration
 
@@ -62,5 +61,23 @@ final class WebViewSecurityConfigurationTests: XCTestCase {
         XCTAssertFalse(policy.contains("ws:"))
         XCTAssertFalse(policy.contains("wss:"))
         XCTAssertFalse(policy.contains("data:"))
+    }
+
+    func testReloadScrollRestorationDoesNotReapplyTheCurrentFragment() throws {
+        let documentURL = URL(fileURLWithPath: "/tmp/document.md")
+        let store = WebViewStore(
+            documentURL: documentURL,
+            scopes: [.file(documentURL)],
+            resourceAuthority: "scroll-policy"
+        )
+        let source = try XCTUnwrap(
+            store.webView.configuration.userContentController.userScripts.first?.source
+        )
+
+        XCTAssertTrue(source.contains("const requested = elementForAnchor(explicitAnchor);"))
+        XCTAssertTrue(source.contains(
+            "const explicitAnchor = preserveScroll ? null : argumentsObject.explicitAnchor || null;"
+        ))
+        XCTAssertFalse(source.contains("explicitAnchor || snapshot.fragment"))
     }
 }

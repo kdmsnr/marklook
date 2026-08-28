@@ -300,6 +300,111 @@ final class DirectoryWatcherTests: XCTestCase {
         XCTAssertEqual(availableSources.value.count, 0)
         XCTAssertEqual(closedDescriptors.value.sorted(), openedDescriptors.value.sorted())
     }
+
+    func testTargetOnlyWatcherReattachesAfterDelayedReappearance() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("marklook-watcher-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = directoryURL.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        try Data("old".utf8).write(to: fileURL)
+
+        let originalTargetSource = TestDirectorySource()
+        let replacementTargetSource = TestDirectorySource()
+        let availableSources = LockedBox([originalTargetSource, replacementTargetSource])
+        let changes = LockedBox<[DirectoryChange]>([])
+        let openEventOnly: @Sendable (URL) -> Int32 = { url in
+            url.withUnsafeFileSystemRepresentation { path in
+                guard let path else { return Int32(-1) }
+                return Darwin.open(path, O_EVTONLY | O_CLOEXEC)
+            }
+        }
+        let watcher = try DirectoryWatcher(
+            fileURL: fileURL,
+            sourceFactory: { _, _, _ in
+                availableSources.withValue { $0.removeFirst() }
+            },
+            openDirectory: { _ in
+                errno = EACCES
+                return -1
+            },
+            openTargetFile: openEventOnly,
+            closeDescriptor: { descriptor in _ = Darwin.close(descriptor) }
+        )
+        try watcher.start { change in
+            changes.withValue { $0.append(change) }
+        }
+
+        try FileManager.default.removeItem(at: fileURL)
+        originalTargetSource.emit(.delete)
+
+        // The rapid retry window ends after roughly 500 ms. Recreate the path only after that
+        // point so recovery depends on the persistent, backed-off retry.
+        try await Task.sleep(for: .milliseconds(650))
+        try Data("reappeared".utf8).write(to: fileURL)
+
+        try await waitUntil("delayed target reattachment", timeout: .seconds(3)) {
+            replacementTargetSource.isActive
+        }
+        replacementTargetSource.emit(.write)
+
+        XCTAssertTrue(originalTargetSource.isCancelled)
+        XCTAssertTrue(replacementTargetSource.isActive)
+        XCTAssertGreaterThanOrEqual(changes.value.count, 2)
+        XCTAssertEqual(availableSources.value.count, 0)
+        watcher.cancel()
+    }
+
+    func testPersistentTargetReattachmentStopsAfterCancellation() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("marklook-watcher-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = directoryURL.appendingPathComponent("document.md")
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        try Data("old".utf8).write(to: fileURL)
+
+        let targetSource = TestDirectorySource()
+        let openAttemptCount = LockedBox(0)
+        let watcher = try DirectoryWatcher(
+            fileURL: fileURL,
+            sourceFactory: { _, _, _ in targetSource },
+            openDirectory: { _ in
+                errno = EACCES
+                return -1
+            },
+            openTargetFile: { url in
+                openAttemptCount.withValue { $0 += 1 }
+                return url.withUnsafeFileSystemRepresentation { path in
+                    guard let path else { return Int32(-1) }
+                    return Darwin.open(path, O_EVTONLY | O_CLOEXEC)
+                }
+            },
+            closeDescriptor: { descriptor in _ = Darwin.close(descriptor) }
+        )
+        try watcher.start { _ in }
+
+        try FileManager.default.removeItem(at: fileURL)
+        targetSource.emit(.delete)
+        try await waitUntil("target retry to begin") {
+            openAttemptCount.value >= 3
+        }
+
+        watcher.cancel()
+        // Allow an attempt that already passed its token check to settle before taking the
+        // baseline, then verify the scheduled chain no longer performs filesystem opens.
+        try await Task.sleep(for: .milliseconds(75))
+        let attemptsAfterCancellation = openAttemptCount.value
+        try await Task.sleep(for: .milliseconds(650))
+
+        XCTAssertEqual(openAttemptCount.value, attemptsAfterCancellation)
+        XCTAssertTrue(targetSource.isCancelled)
+    }
 }
 
 private final class TestDirectorySource: DirectoryWatchingSource, @unchecked Sendable {

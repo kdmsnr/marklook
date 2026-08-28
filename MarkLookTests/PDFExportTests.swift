@@ -84,8 +84,7 @@ final class PDFExportTests: XCTestCase {
         let store = WebViewStore(
             documentURL: documentURL,
             scopes: [.file(documentURL)],
-            resourceAuthority: "detached-pdf-test",
-            dependencyLoaded: { _ in }
+            resourceAuthority: "detached-pdf-test"
         )
         var completionCalled = false
 

@@ -98,7 +98,7 @@ final class WindowTabCoordinatorTests: XCTestCase {
 
     func testDocumentTabUsesTheFileName() {
         let route = ViewerWindowRoute.viewing(
-            URL(fileURLWithPath: "/tmp/a folder/README.md#installation")
+            URL(string: "file:///tmp/a%20folder/README.md#installation")!
         )!
         let window = NSWindow()
 

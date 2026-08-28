@@ -12,7 +12,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         XCTAssertEqual(result.source, source)
         XCTAssertTrue(result.math.isEmpty)
         XCTAssertTrue(result.footnotes.isEmpty)
-        XCTAssertTrue(result.footnoteReferenceTokens.isEmpty)
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
     }
 
     func testFeaturelessMarkdownStillNormalizesCarriageReturns() {
@@ -29,7 +29,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         XCTAssertEqual(result.source, source)
         XCTAssertTrue(result.math.isEmpty)
         XCTAssertTrue(result.footnotes.isEmpty)
-        XCTAssertTrue(result.footnoteReferenceTokens.isEmpty)
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
     }
 
     func testASCIIMathMarkerAfterMultibyteTextIsDetected() {
@@ -47,7 +47,7 @@ final class MarkupPreprocessorTests: XCTestCase {
 
         XCTAssertEqual(result.footnotes.map(\.id), ["注"])
         XCTAssertEqual(result.footnotes.map(\.source), ["日本語の脚注"])
-        XCTAssertEqual(result.footnoteReferenceTokens.values.sorted(), ["注"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["注"])
     }
 
     func testMultibyteScalarBetweenBracketAndCaretIsNotAFootnoteMarker() {
@@ -57,7 +57,7 @@ final class MarkupPreprocessorTests: XCTestCase {
 
         XCTAssertEqual(result.source, source)
         XCTAssertTrue(result.footnotes.isEmpty)
-        XCTAssertTrue(result.footnoteReferenceTokens.isEmpty)
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
     }
 
     func testCarriageReturnsAndExtensionsAreDetectedInSameUTF8Scan() {
@@ -90,6 +90,168 @@ final class MarkupPreprocessorTests: XCTestCase {
         XCTAssertEqual(result.footnotes.map(\.source), ["Footnote body"])
         XCTAssertTrue(result.source.contains("$not-math$ [^note]"))
         XCTAssertFalse(result.source.contains("Inline $x + y$"))
-        XCTAssertEqual(result.footnoteReferenceTokens.values.sorted(), ["note"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["note"])
+    }
+
+    func testShorterFenceInsideLongFenceDoesNotExposeExtensions() {
+        let source = """
+        ````text
+        ```
+        $not-math$ [^note]
+        [^note]: not a definition
+        ````
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, source)
+        XCTAssertTrue(result.math.isEmpty)
+        XCTAssertTrue(result.footnotes.isEmpty)
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
+    }
+
+    func testExtensionsInsideMultilineCodeSpanRemainLiteral() {
+        let source = """
+        `code starts
+        $not-math$ [^note]`
+
+        [^note]: Real footnote
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertTrue(result.source.contains("$not-math$ [^note]"), result.source)
+        XCTAssertTrue(result.math.isEmpty)
+        XCTAssertEqual(result.footnotes.map(\.id), ["note"])
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
+    }
+
+    func testUnmatchedBacktickRunDoesNotSuppressExtensionsOnFollowingLines() {
+        let source = """
+        `unclosed literal
+        Inline $x$ and [^note].
+        [^note]: Footnote body
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.math.map(\.source), ["x"])
+        XCTAssertEqual(result.footnotes.map(\.id), ["note"])
+        XCTAssertEqual(result.footnotes.map(\.source), ["Footnote body"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["note"])
+        XCTAssertTrue(result.source.hasPrefix("`unclosed literal\n"), result.source)
+    }
+
+    func testDifferentLengthBacktickRunDoesNotCloseOrValidateAnOpener() {
+        let source = """
+        `unclosed literal
+        ``also literal`` Inline $x$ and [^note].
+        [^note]: Footnote body
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.math.map(\.source), ["x"])
+        XCTAssertEqual(result.footnotes.map(\.id), ["note"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["note"])
+    }
+
+    func testCodeSpansDoNotCrossRepresentativeCommonMarkBlockBoundaries() {
+        let cases = [
+            ("ATX heading", "# `heading\nParagraph $x$`"),
+            ("setext heading", "Heading `\n---\nParagraph $x$`"),
+            ("thematic break", "`paragraph\n***\nParagraph $x$`"),
+            ("list item", "- `first item\n- Second item $x$`"),
+            ("block quote", "`paragraph\n> Quote $x$`"),
+        ]
+
+        for (boundary, source) in cases {
+            let result = preprocessor.process(source)
+
+            XCTAssertEqual(result.math.map(\.source), ["x"], boundary)
+        }
+    }
+
+    func testValidMultilineCodeSpansRemainInsideListAndBlockQuoteParagraphs() {
+        let cases = [
+            "- `code starts\n  $not-math$ ends`",
+            "> `code starts\n> $not-math$ ends`",
+        ]
+
+        for source in cases {
+            let result = preprocessor.process(source)
+
+            XCTAssertTrue(result.math.isEmpty, source)
+            XCTAssertTrue(result.source.contains("$not-math$"), result.source)
+        }
+    }
+
+    func testATXHeadingBacktickCannotHideFollowingParagraphExtensions() {
+        let source = """
+        # `heading
+        Paragraph $x$ and [^note]`
+        [^note]: Footnote body
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.math.map(\.source), ["x"])
+        XCTAssertEqual(result.footnotes.map(\.id), ["note"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["note"])
+    }
+
+    func testFootnoteDefinitionSeparatesCodeDelimiterSegments() {
+        let source = """
+        `literal
+        [^note]: Footnote body`
+        Reference [^note].
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.footnotes.map(\.id), ["note"])
+        XCTAssertEqual(result.footnotes.map(\.source), ["Footnote body`"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["note"])
+        XCTAssertTrue(result.source.contains("Reference"), result.source)
+    }
+
+    func testOrderedMarkerAboveOneCannotInterruptOrdinaryParagraphCodeSpan() {
+        let source = """
+        Paragraph `code
+        2. $not-math$`
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertTrue(result.math.isEmpty, result.source)
+        XCTAssertTrue(result.source.contains("$not-math$"), result.source)
+    }
+
+    func testOrderedListItemAndOneMarkerStillSeparateCodeDelimiterSegments() {
+        let cases = [
+            "Paragraph `code\n1. $x$`",
+            "1. `first item\n2. $x$`",
+        ]
+
+        for source in cases {
+            let result = preprocessor.process(source)
+
+            XCTAssertEqual(result.math.map(\.source), ["x"], source)
+        }
+    }
+
+    func testBlankAndNonASCIIListMarkersCannotInterruptOrdinaryParagraph() {
+        let cases = [
+            "Paragraph `code\n1.\ncontinued $not-math$`",
+            "Paragraph `code\n*\ncontinued $not-math$`",
+            "Paragraph `code\n١. $not-math$`",
+        ]
+
+        for source in cases {
+            let result = preprocessor.process(source)
+
+            XCTAssertTrue(result.math.isEmpty, source)
+            XCTAssertTrue(result.source.contains("$not-math$"), result.source)
+        }
     }
 }

@@ -45,6 +45,7 @@ struct HTMLSanitizer: Sendable {
         for element in try document.select("style") {
             let cleaned = sanitizeCSS(
                 element.data(),
+                isStyleSheet: true,
                 context: context,
                 resources: &resources,
                 warnings: &warnings
@@ -55,6 +56,7 @@ struct HTMLSanitizer: Sendable {
         for element in try document.select("[style]") {
             let cleaned = sanitizeCSS(
                 try element.attr("style"),
+                isStyleSheet: false,
                 context: context,
                 resources: &resources,
                 warnings: &warnings
@@ -71,7 +73,9 @@ struct HTMLSanitizer: Sendable {
         // Move the limited, sanitized stylesheet subset into the fragment so it is scoped by
         // the viewer's ShadowRoot rather than mutating the host page.
         if let head = document.head(), let body = document.body() {
-            for style in try head.select("style, link[rel=stylesheet]") {
+            // `prependChild` inserts at index zero. Walk the source nodes backwards so their
+            // cascade order remains identical after moving them into the body.
+            for style in Array(try head.select("style, link[rel=stylesheet]")).reversed() {
                 try body.prependChild(style)
             }
         }
@@ -323,18 +327,12 @@ struct HTMLSanitizer: Sendable {
 
     private func sanitizeCSS(
         _ css: String,
+        isStyleSheet: Bool,
         context: RenderContext,
         resources: inout Set<ResourceReference>,
         warnings: inout [RenderWarning]
     ) -> String {
-        var output = css
-        let removedRules = [
-            "(?is)@import\\s+url\\([^;]+;?",
-            "(?is)@import\\s+['\"][^;]+;?",
-        ]
-        for pattern in removedRules {
-            output = output.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
-        }
+        var output = isStyleSheet ? removingCSSImportRules(from: css) : css
         let removedDeclarations = [
             "(?is)(^|[;{])\\s*(?:-moz-binding|behavior|-webkit-user-modify|user-modify)\\s*:[^;}]*(?=;|\\}|\\z)",
             "(?is)(^|[;{])\\s*[-a-z0-9_]+\\s*:[^;{}]*\\bexpression\\s*\\([^;{}]*(?=;|\\}|\\z)",
@@ -343,15 +341,8 @@ struct HTMLSanitizer: Sendable {
             output = output.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
         }
 
-        guard let regex = try? NSRegularExpression(
-            pattern: #"(?is)url\(\s*(['\"]?)(.*?)\1\s*\)"#
-        ) else { return output }
-        let range = NSRange(output.startIndex..., in: output)
-        for match in regex.matches(in: output, range: range).reversed() {
-            guard let whole = Range(match.range(at: 0), in: output),
-                  let valueRange = Range(match.range(at: 2), in: output)
-            else { continue }
-            let raw = String(output[valueRange])
+        for match in cssURLMatches(in: output).reversed() {
+            let raw = decodeCSSEscapes(match.value)
             let replacement: String
             if let url = rewriteResource(raw, kind: .image, context: context, resources: &resources) {
                 replacement = "url(\"\(url)\")"
@@ -359,7 +350,427 @@ struct HTMLSanitizer: Sendable {
                 replacement = "url(\"\")"
                 warnings.append(.init(message: "Blocked non-local CSS resource: \(raw)"))
             }
-            output.replaceSubrange(whole, with: replacement)
+            output.replaceSubrange(match.range, with: replacement)
+        }
+        return output
+    }
+
+    /// Removes actual CSS `@import` at-rules without interpreting matching prose inside comments
+    /// or strings. The prelude may contain quoted strings, comments, and nested functions such as
+    /// `supports(...)`; only a top-level semicolon (or the end of an invalid rule) terminates it.
+    private func removingCSSImportRules(from css: String) -> String {
+        var ranges: [Range<String.Index>] = []
+        var cursor = css.startIndex
+        var braceDepth = 0
+        var parenthesisDepth = 0
+        var bracketDepth = 0
+        var isAtRuleStart = true
+
+        while cursor < css.endIndex {
+            if isAtRuleStart,
+               braceDepth == 0,
+               parenthesisDepth == 0,
+               bracketDepth == 0
+            {
+                let remaining = css[cursor...]
+                if remaining.hasPrefix("<!--") {
+                    cursor = css.index(cursor, offsetBy: 4)
+                    continue
+                }
+                if remaining.hasPrefix("-->") {
+                    cursor = css.index(cursor, offsetBy: 3)
+                    continue
+                }
+            }
+            if css[cursor] == "/",
+               let next = css.index(cursor, offsetBy: 1, limitedBy: css.endIndex),
+               next < css.endIndex,
+               css[next] == "*"
+            {
+                cursor = endOfCSSComment(in: css, after: css.index(after: next))
+                continue
+            }
+            if css[cursor] == "\"" || css[cursor] == "'" {
+                if braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0 {
+                    isAtRuleStart = false
+                }
+                cursor = endOfCSSString(in: css, startingAt: cursor)
+                continue
+            }
+            if css[cursor] == "\\" {
+                if braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0 {
+                    isAtRuleStart = false
+                }
+                cursor = indexAfterCSSIdentifierEscape(in: css, at: cursor)
+                continue
+            }
+
+            switch css[cursor] {
+            case "{":
+                braceDepth += 1
+                isAtRuleStart = false
+            case "}":
+                braceDepth = max(0, braceDepth - 1)
+                if braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0 {
+                    isAtRuleStart = true
+                }
+            case "(":
+                if braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0 {
+                    isAtRuleStart = false
+                }
+                parenthesisDepth += 1
+            case ")":
+                parenthesisDepth = max(0, parenthesisDepth - 1)
+            case "[":
+                if braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0 {
+                    isAtRuleStart = false
+                }
+                bracketDepth += 1
+            case "]":
+                bracketDepth = max(0, bracketDepth - 1)
+            case ";" where braceDepth == 0 && parenthesisDepth == 0 && bracketDepth == 0:
+                isAtRuleStart = true
+            case "@" where isAtRuleStart
+                && braceDepth == 0
+                && parenthesisDepth == 0
+                && bracketDepth == 0:
+                if let keywordEnd = cssImportKeywordEnd(in: css, at: cursor) {
+                    let ruleEnd = cssImportRuleEnd(in: css, after: keywordEnd)
+                    ranges.append(cursor ..< ruleEnd)
+                    cursor = ruleEnd
+                    continue
+                }
+                isAtRuleStart = false
+            default:
+                if braceDepth == 0,
+                   parenthesisDepth == 0,
+                   bracketDepth == 0,
+                   !css[cursor].isWhitespace
+                {
+                    isAtRuleStart = false
+                }
+                break
+            }
+
+            cursor = css.index(after: cursor)
+        }
+
+        var output = css
+        for range in ranges.reversed() {
+            output.removeSubrange(range)
+        }
+        return output
+    }
+
+    private func cssImportKeywordEnd(
+        in css: String,
+        at atSign: String.Index
+    ) -> String.Index? {
+        var cursor = css.index(after: atSign)
+        let nameStart = cursor
+        while cursor < css.endIndex {
+            if css[cursor] == "\\" {
+                cursor = indexAfterCSSIdentifierEscape(in: css, at: cursor)
+            } else if isCSSIdentifierCharacter(css[cursor]) {
+                cursor = css.index(after: cursor)
+            } else {
+                break
+            }
+        }
+        guard cursor > nameStart else { return nil }
+        let rawName = String(css[nameStart ..< cursor])
+        return decodeCSSEscapes(rawName).lowercased() == "import" ? cursor : nil
+    }
+
+    private func cssImportRuleEnd(
+        in css: String,
+        after keywordEnd: String.Index
+    ) -> String.Index {
+        var cursor = keywordEnd
+        var nestingDepth = 0
+
+        while cursor < css.endIndex {
+            if css[cursor] == "/",
+               let next = css.index(cursor, offsetBy: 1, limitedBy: css.endIndex),
+               next < css.endIndex,
+               css[next] == "*"
+            {
+                cursor = endOfCSSComment(in: css, after: css.index(after: next))
+                continue
+            }
+            if css[cursor] == "\"" || css[cursor] == "'" {
+                cursor = endOfCSSString(in: css, startingAt: cursor)
+                continue
+            }
+            if css[cursor] == "\\" {
+                cursor = indexAfterCSSIdentifierEscape(in: css, at: cursor)
+                continue
+            }
+
+            switch css[cursor] {
+            case "(", "[":
+                nestingDepth += 1
+            case ")", "]":
+                nestingDepth = max(0, nestingDepth - 1)
+            case ";" where nestingDepth == 0:
+                return css.index(after: cursor)
+            case "{", "}":
+                if nestingDepth == 0 { return cursor }
+            default:
+                break
+            }
+            cursor = css.index(after: cursor)
+        }
+        return css.endIndex
+    }
+
+    private func indexAfterCSSIdentifierEscape(
+        in css: String,
+        at backslash: String.Index
+    ) -> String.Index {
+        var cursor = css.index(after: backslash)
+        guard cursor < css.endIndex else { return css.endIndex }
+
+        var hexDigitCount = 0
+        while cursor < css.endIndex,
+              hexDigitCount < 6,
+              css[cursor].unicodeScalars.count == 1,
+              css[cursor].unicodeScalars.first?.isHTMLPercentHexDigit == true
+        {
+            hexDigitCount += 1
+            cursor = css.index(after: cursor)
+        }
+        if hexDigitCount > 0 {
+            if cursor < css.endIndex,
+               css[cursor].unicodeScalars.count == 1,
+               css[cursor].unicodeScalars.first?.isCSSWhitespace == true
+            {
+                cursor = css.index(after: cursor)
+            }
+            return cursor
+        }
+        return css.index(after: cursor)
+    }
+
+    /// Finds actual CSS `url()` tokens while leaving comments and quoted string contents alone.
+    /// This is intentionally a small lexical scanner rather than a declaration parser: callers
+    /// still preserve the document's CSS, but resource-looking prose must not create dependencies.
+    private func cssURLMatches(in css: String) -> [CSSURLMatch] {
+        var matches: [CSSURLMatch] = []
+        var cursor = css.startIndex
+
+        while cursor < css.endIndex {
+            if css[cursor] == "/",
+               let next = css.index(cursor, offsetBy: 1, limitedBy: css.endIndex),
+               next < css.endIndex,
+               css[next] == "*"
+            {
+                cursor = endOfCSSComment(in: css, after: css.index(after: next))
+                continue
+            }
+
+            if css[cursor] == "\"" || css[cursor] == "'" {
+                cursor = endOfCSSString(in: css, startingAt: cursor)
+                continue
+            }
+
+            guard isCSSURLFunction(in: css, at: cursor) else {
+                cursor = css.index(after: cursor)
+                continue
+            }
+
+            let functionStart = cursor
+            var position = css.index(cursor, offsetBy: 3)
+            while position < css.endIndex, css[position].isWhitespace {
+                position = css.index(after: position)
+            }
+            guard position < css.endIndex, css[position] == "(" else {
+                cursor = css.index(after: cursor)
+                continue
+            }
+
+            position = css.index(after: position)
+            while position < css.endIndex, css[position].isWhitespace {
+                position = css.index(after: position)
+            }
+
+            let valueStart: String.Index
+            let valueEnd: String.Index
+            let closingParenthesis: String.Index
+            if position < css.endIndex, (css[position] == "\"" || css[position] == "'") {
+                let quote = css[position]
+                valueStart = css.index(after: position)
+                var valueCursor = valueStart
+                var foundQuote: String.Index?
+                while valueCursor < css.endIndex {
+                    if css[valueCursor] == "\\" {
+                        valueCursor = indexAfterCSSEscape(in: css, at: valueCursor)
+                    } else if css[valueCursor] == quote {
+                        foundQuote = valueCursor
+                        break
+                    } else {
+                        valueCursor = css.index(after: valueCursor)
+                    }
+                }
+                guard let quoteEnd = foundQuote else {
+                    cursor = css.index(after: cursor)
+                    continue
+                }
+                valueEnd = quoteEnd
+                var afterQuote = css.index(after: quoteEnd)
+                while afterQuote < css.endIndex, css[afterQuote].isWhitespace {
+                    afterQuote = css.index(after: afterQuote)
+                }
+                guard afterQuote < css.endIndex, css[afterQuote] == ")" else {
+                    cursor = css.index(after: cursor)
+                    continue
+                }
+                closingParenthesis = afterQuote
+            } else {
+                valueStart = position
+                var valueCursor = position
+                var foundParenthesis: String.Index?
+                while valueCursor < css.endIndex {
+                    if css[valueCursor] == "\\" {
+                        valueCursor = indexAfterCSSEscape(in: css, at: valueCursor)
+                    } else if css[valueCursor] == ")" {
+                        foundParenthesis = valueCursor
+                        break
+                    } else if css[valueCursor] == "\"" || css[valueCursor] == "'" {
+                        break
+                    } else {
+                        valueCursor = css.index(after: valueCursor)
+                    }
+                }
+                guard let parenthesis = foundParenthesis else {
+                    cursor = css.index(after: cursor)
+                    continue
+                }
+                var trimmedEnd = parenthesis
+                while trimmedEnd > valueStart {
+                    let previous = css.index(before: trimmedEnd)
+                    guard css[previous].isWhitespace else { break }
+                    trimmedEnd = previous
+                }
+                valueEnd = trimmedEnd
+                closingParenthesis = parenthesis
+            }
+
+            let matchEnd = css.index(after: closingParenthesis)
+            matches.append(.init(
+                range: functionStart ..< matchEnd,
+                value: String(css[valueStart ..< valueEnd])
+            ))
+            cursor = matchEnd
+        }
+        return matches
+    }
+
+    private func isCSSURLFunction(in css: String, at start: String.Index) -> Bool {
+        if start > css.startIndex,
+           isCSSIdentifierCharacter(css[css.index(before: start)])
+        {
+            return false
+        }
+        guard let end = css.index(start, offsetBy: 3, limitedBy: css.endIndex),
+              String(css[start ..< end]).lowercased() == "url"
+        else { return false }
+        return end == css.endIndex || !isCSSIdentifierCharacter(css[end])
+    }
+
+    private func isCSSIdentifierCharacter(_ character: Character) -> Bool {
+        character == "-" || character == "_" || character == "\\"
+            || character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
+    }
+
+    private func endOfCSSComment(in css: String, after start: String.Index) -> String.Index {
+        var cursor = start
+        while cursor < css.endIndex {
+            if css[cursor] == "*" {
+                let next = css.index(after: cursor)
+                if next < css.endIndex, css[next] == "/" {
+                    return css.index(after: next)
+                }
+            }
+            cursor = css.index(after: cursor)
+        }
+        return css.endIndex
+    }
+
+    private func endOfCSSString(in css: String, startingAt quoteStart: String.Index) -> String.Index {
+        let quote = css[quoteStart]
+        var cursor = css.index(after: quoteStart)
+        while cursor < css.endIndex {
+            if css[cursor] == "\\" {
+                cursor = indexAfterCSSEscape(in: css, at: cursor)
+            } else if css[cursor] == quote {
+                return css.index(after: cursor)
+            } else {
+                cursor = css.index(after: cursor)
+            }
+        }
+        return css.endIndex
+    }
+
+    private func indexAfterCSSEscape(in css: String, at backslash: String.Index) -> String.Index {
+        let escaped = css.index(after: backslash)
+        guard escaped < css.endIndex else { return css.endIndex }
+        return css.index(after: escaped)
+    }
+
+    private func decodeCSSEscapes(_ value: String) -> String {
+        let scalars = Array(value.unicodeScalars)
+        var output = ""
+        output.reserveCapacity(value.utf8.count)
+        var index = scalars.startIndex
+
+        while index < scalars.endIndex {
+            guard scalars[index].value == 0x5C else {
+                output.unicodeScalars.append(scalars[index])
+                index += 1
+                continue
+            }
+
+            let escapedIndex = index + 1
+            guard escapedIndex < scalars.endIndex else {
+                output.append("\\")
+                break
+            }
+            let escaped = scalars[escapedIndex]
+            if escaped.value == 0x0A || escaped.value == 0x0C {
+                index += 2
+                continue
+            }
+            if escaped.value == 0x0D {
+                index += escapedIndex + 1 < scalars.endIndex
+                    && scalars[escapedIndex + 1].value == 0x0A ? 3 : 2
+                continue
+            }
+
+            guard escaped.isHTMLPercentHexDigit else {
+                output.unicodeScalars.append(escaped)
+                index += 2
+                continue
+            }
+
+            var hexEnd = escapedIndex
+            while hexEnd < scalars.endIndex,
+                  hexEnd - escapedIndex < 6,
+                  scalars[hexEnd].isHTMLPercentHexDigit
+            {
+                hexEnd += 1
+            }
+            let hex = String(String.UnicodeScalarView(scalars[escapedIndex ..< hexEnd]))
+            let value = UInt32(hex, radix: 16) ?? 0
+            if value == 0 || value > 0x10_FFFF || (0xD800...0xDFFF).contains(value) {
+                output.unicodeScalars.append("\u{FFFD}")
+            } else if let scalar = Unicode.Scalar(value) {
+                output.unicodeScalars.append(scalar)
+            }
+            if hexEnd < scalars.endIndex, scalars[hexEnd].isCSSWhitespace {
+                hexEnd += 1
+            }
+            index = hexEnd
         }
         return output
     }
@@ -375,6 +786,11 @@ struct HTMLSanitizer: Sendable {
     }
 }
 
+private struct CSSURLMatch {
+    let range: Range<String.Index>
+    let value: String
+}
+
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
@@ -383,6 +799,15 @@ private extension Unicode.Scalar {
     var isHTMLPercentHexDigit: Bool {
         switch value {
         case 0x30...0x39, 0x41...0x46, 0x61...0x66:
+            true
+        default:
+            false
+        }
+    }
+
+    var isCSSWhitespace: Bool {
+        switch value {
+        case 0x09, 0x0A, 0x0C, 0x0D, 0x20:
             true
         default:
             false

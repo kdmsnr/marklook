@@ -217,37 +217,187 @@ struct CharacterDecoder: Sendable {
         // gives a one-to-one byte mapping here; it does not decode the document body.
         let sniffLength = min(data.count, 8_192)
         guard sniffLength > 0,
-              var prefix = String(data: data.prefix(sniffLength), encoding: .isoLatin1) else {
+              let prefix = String(data: data.prefix(sniffLength), encoding: .isoLatin1) else {
             return nil
         }
 
-        if let commentExpression = try? NSRegularExpression(
-            pattern: #"<!--.*?-->"#,
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        ) {
-            let range = NSRange(prefix.startIndex..<prefix.endIndex, in: prefix)
-            prefix = commentExpression.stringByReplacingMatches(
-                in: prefix,
-                range: range,
-                withTemplate: ""
+        var cursor = prefix.startIndex
+        var rawTextElement: String?
+        while let opening = prefix[cursor...].firstIndex(of: "<") {
+            if let activeRawTextElement = rawTextElement {
+                if let tag = parsedHTMLTag(in: prefix, at: opening),
+                   tag.isClosing,
+                   tag.name == activeRawTextElement
+                {
+                    cursor = tag.end
+                    rawTextElement = nil
+                } else {
+                    cursor = prefix.index(after: opening)
+                }
+                continue
+            }
+
+            if prefix[opening...].hasPrefix("<!--") {
+                guard let close = prefix.range(
+                    of: "-->",
+                    range: prefix.index(opening, offsetBy: 4) ..< prefix.endIndex
+                ) else { return nil }
+                cursor = close.upperBound
+                continue
+            }
+
+            if prefix[opening...].hasPrefix("<!") || prefix[opening...].hasPrefix("<?") {
+                guard let end = endOfHTMLTag(in: prefix, at: opening) else { return nil }
+                cursor = end
+                continue
+            }
+
+            guard let tag = parsedHTMLTag(in: prefix, at: opening) else {
+                cursor = prefix.index(after: opening)
+                continue
+            }
+            cursor = tag.end
+            guard !tag.isClosing else { continue }
+
+            if tag.name == "meta",
+               let charset = charsetDeclaredByMetaAttributes(in: tag.attributes)
+            {
+                return charset
+            }
+            if Self.rawTextHTMLTags.contains(tag.name) {
+                rawTextElement = tag.name
+            }
+        }
+        return nil
+    }
+
+    private static let rawTextHTMLTags: Set<String> = [
+        "iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "textarea", "title", "xmp",
+    ]
+
+    private func parsedHTMLTag(in source: String, at opening: String.Index) -> ParsedHTMLTag? {
+        guard source[opening] == "<",
+              let end = endOfHTMLTag(in: source, at: opening)
+        else { return nil }
+
+        var cursor = source.index(after: opening)
+        var isClosing = false
+        if cursor < source.endIndex, source[cursor] == "/" {
+            isClosing = true
+            cursor = source.index(after: cursor)
+        }
+        let nameStart = cursor
+        while cursor < source.endIndex, source[cursor].isHTMLTagNameCharacter {
+            cursor = source.index(after: cursor)
+        }
+        guard cursor > nameStart else { return nil }
+
+        let contentEnd = source.index(before: end)
+        return ParsedHTMLTag(
+            name: String(source[nameStart ..< cursor]).lowercased(),
+            isClosing: isClosing,
+            attributes: String(source[cursor ..< contentEnd]),
+            end: end
+        )
+    }
+
+    private func endOfHTMLTag(in source: String, at opening: String.Index) -> String.Index? {
+        var cursor = source.index(after: opening)
+        var quote: Character?
+        while cursor < source.endIndex {
+            let character = source[cursor]
+            if let activeQuote = quote {
+                if character == activeQuote { quote = nil }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else if character == ">" {
+                return source.index(after: cursor)
+            }
+            cursor = source.index(after: cursor)
+        }
+        return nil
+    }
+
+    private func charsetDeclaredByMetaAttributes(in source: String) -> String? {
+        let attributes = parsedHTMLAttributes(source)
+        if let charset = attributes["charset"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !charset.isEmpty
+        {
+            return charset
+        }
+
+        guard attributes["http-equiv"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "content-type",
+            let content = attributes["content"],
+            let expression = try? NSRegularExpression(
+                pattern: #"(?i)\bcharset\s*=\s*[\"']?\s*([A-Za-z0-9._:-]+)"#
             )
-        }
+        else { return nil }
 
-        guard let expression = try? NSRegularExpression(
-            pattern: #"<meta\b[^>]*\bcharset\s*=\s*[\"']?\s*([A-Za-z0-9._:-]+)"#,
-            options: [.caseInsensitive]
-        ) else {
-            return nil
-        }
+        let range = NSRange(content.startIndex..<content.endIndex, in: content)
+        guard let match = expression.firstMatch(in: content, range: range),
+              let charsetRange = Range(match.range(at: 1), in: content)
+        else { return nil }
+        return String(content[charsetRange])
+    }
 
-        let searchRange = NSRange(prefix.startIndex..<prefix.endIndex, in: prefix)
-        guard let match = expression.firstMatch(in: prefix, range: searchRange),
-              match.numberOfRanges > 1,
-              let charsetRange = Range(match.range(at: 1), in: prefix) else {
-            return nil
-        }
+    private func parsedHTMLAttributes(_ source: String) -> [String: String] {
+        var result: [String: String] = [:]
+        var cursor = source.startIndex
+        while cursor < source.endIndex {
+            while cursor < source.endIndex,
+                  source[cursor].isWhitespace || source[cursor] == "/"
+            {
+                cursor = source.index(after: cursor)
+            }
+            guard cursor < source.endIndex else { break }
 
-        return String(prefix[charsetRange])
+            let nameStart = cursor
+            while cursor < source.endIndex,
+                  !source[cursor].isWhitespace,
+                  source[cursor] != "=",
+                  source[cursor] != "/"
+            {
+                cursor = source.index(after: cursor)
+            }
+            guard cursor > nameStart else {
+                cursor = source.index(after: cursor)
+                continue
+            }
+            let name = String(source[nameStart ..< cursor]).lowercased()
+            while cursor < source.endIndex, source[cursor].isWhitespace {
+                cursor = source.index(after: cursor)
+            }
+
+            var value = ""
+            if cursor < source.endIndex, source[cursor] == "=" {
+                cursor = source.index(after: cursor)
+                while cursor < source.endIndex, source[cursor].isWhitespace {
+                    cursor = source.index(after: cursor)
+                }
+                if cursor < source.endIndex, (source[cursor] == "\"" || source[cursor] == "'") {
+                    let quote = source[cursor]
+                    cursor = source.index(after: cursor)
+                    let valueStart = cursor
+                    while cursor < source.endIndex, source[cursor] != quote {
+                        cursor = source.index(after: cursor)
+                    }
+                    value = String(source[valueStart ..< cursor])
+                    if cursor < source.endIndex { cursor = source.index(after: cursor) }
+                } else {
+                    let valueStart = cursor
+                    while cursor < source.endIndex,
+                          !source[cursor].isWhitespace
+                    {
+                        cursor = source.index(after: cursor)
+                    }
+                    value = String(source[valueStart ..< cursor])
+                }
+            }
+            if result[name] == nil { result[name] = value }
+        }
+        return result
     }
 
     private func encoding(forCharsetName name: String) -> DocumentTextEncoding? {
@@ -265,6 +415,26 @@ struct CharacterDecoder: Sendable {
             .eucJP
         default:
             nil
+        }
+    }
+}
+
+private struct ParsedHTMLTag {
+    let name: String
+    let isClosing: Bool
+    let attributes: String
+    let end: String.Index
+}
+
+private extension Character {
+    var isHTMLTagNameCharacter: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D:
+                true
+            default:
+                false
+            }
         }
     }
 }

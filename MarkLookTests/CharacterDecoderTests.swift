@@ -132,6 +132,26 @@ final class CharacterDecoderTests: XCTestCase {
         XCTAssertEqual(result.source, .strictUTF8)
     }
 
+    func testCharsetTextInsideOrdinaryMetaAttributeIsNotADeclaration() throws {
+        let body = #"<meta name="description" content="charset=iso-8859-1"><p>UTF-8 日本語</p>"#
+
+        let result = try decoder.decode(Data(body.utf8))
+
+        XCTAssertEqual(result.text, body)
+        XCTAssertEqual(result.encoding, .utf8)
+        XCTAssertEqual(result.source, .strictUTF8)
+    }
+
+    func testMetaShapedTextInsideScriptIsNotADeclaration() throws {
+        let body = #"<script>const example = '<meta charset="iso-8859-1">';</script><p>UTF-8 日本語</p>"#
+
+        let result = try decoder.decode(Data(body.utf8))
+
+        XCTAssertEqual(result.text, body)
+        XCTAssertEqual(result.encoding, .utf8)
+        XCTAssertEqual(result.source, .strictUTF8)
+    }
+
     func testNULHeavyInputIsRejectedAsLikelyBinary() {
         let data = Data(repeating: 0, count: 256)
 

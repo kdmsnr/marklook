@@ -20,14 +20,12 @@ final class LocalResourceSchemeHandler: NSObject, WKURLSchemeHandler {
     init(
         documentURL: URL,
         scopes: [LocalResourceScope],
-        resourceAuthority: String,
-        dependencyLoaded: @escaping @Sendable (URL) -> Void
+        resourceAuthority: String
     ) {
         loader = LocalResourceLoader(
             documentURL: documentURL,
             scopes: scopes,
-            resourceAuthority: resourceAuthority,
-            dependencyLoaded: dependencyLoaded
+            resourceAuthority: resourceAuthority
         )
     }
 
@@ -90,17 +88,13 @@ final class LocalResourceLoader: @unchecked Sendable {
     private var state: State
     private let validator = LocalPathValidator()
     private let resourceAuthority: String
-    private let dependencyLoaded: @Sendable (URL) -> Void
-
     init(
         documentURL: URL,
         scopes: [LocalResourceScope],
-        resourceAuthority: String,
-        dependencyLoaded: @escaping @Sendable (URL) -> Void
+        resourceAuthority: String
     ) {
         state = State(documentURL: documentURL, scopes: scopes)
         self.resourceAuthority = resourceAuthority.lowercased()
-        self.dependencyLoaded = dependencyLoaded
     }
 
     func update(documentURL: URL, scopes: [LocalResourceScope]) {
@@ -180,7 +174,6 @@ final class LocalResourceLoader: @unchecked Sendable {
             } else {
                 data = rawData
             }
-            dependencyLoaded(sourceURL)
         }
 
         let mimeType = mimeType(for: sourceURL)

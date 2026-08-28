@@ -23,12 +23,11 @@ final class LocalResourceSchemeHandlerTests: XCTestCase {
         documentURL = nil
     }
 
-    func testAllowedResourceReturnsNoSniffNoStoreResponseAndRecordsDependency() throws {
+    func testAllowedResourceReturnsNoSniffNoStoreResponse() throws {
         let imageURL = rootURL.appendingPathComponent("image.png")
         let imageData = Data([0x89, 0x50, 0x4E, 0x47])
         try imageData.write(to: imageURL)
-        let recorder = LockedURLRecorder()
-        let loader = makeLoader { recorder.append($0) }
+        let loader = makeLoader()
 
         let result = try loader.response(for: request(source: "image.png"))
 
@@ -36,7 +35,6 @@ final class LocalResourceSchemeHandlerTests: XCTestCase {
         XCTAssertEqual(result.urlResponse.statusCode, 200)
         XCTAssertEqual(result.urlResponse.value(forHTTPHeaderField: "X-Content-Type-Options"), "nosniff")
         XCTAssertEqual(result.urlResponse.value(forHTTPHeaderField: "Cache-Control"), "no-store, max-age=0")
-        XCTAssertEqual(recorder.values.map(\.path), [imageURL.path])
     }
 
     func testStylesheetIsStrictlyDecodedAndResourceURLsAreRewritten() throws {
@@ -165,14 +163,11 @@ final class LocalResourceSchemeHandlerTests: XCTestCase {
         }
     }
 
-    private func makeLoader(
-        dependencyLoaded: @escaping @Sendable (URL) -> Void = { _ in }
-    ) -> LocalResourceLoader {
+    private func makeLoader() -> LocalResourceLoader {
         LocalResourceLoader(
             documentURL: documentURL,
             scopes: [.folder(rootURL)],
-            resourceAuthority: authority,
-            dependencyLoaded: dependencyLoaded
+            resourceAuthority: authority
         )
     }
 
@@ -183,22 +178,5 @@ final class LocalResourceSchemeHandlerTests: XCTestCase {
         components.path = "/open"
         components.queryItems = [.init(name: "source", value: source)]
         return URLRequest(url: components.url!)
-    }
-}
-
-private final class LockedURLRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [URL] = []
-
-    var values: [URL] {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
-
-    func append(_ url: URL) {
-        lock.lock()
-        storage.append(url)
-        lock.unlock()
     }
 }

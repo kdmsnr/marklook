@@ -94,6 +94,110 @@ final class MarkdownRenderingTests: XCTestCase {
         XCTAssertNotEqual(output.timing.htmlParsing, .zero)
     }
 
+    func testExtensionsStayLiteralInsideLongFencedCodeBlock() async throws {
+        let source = """
+        ````text
+        ```
+        $not-math$ [^note]
+        ````
+
+        [^note]: Footnote
+        """
+
+        let output = try await render(source)
+
+        XCTAssertTrue(output.htmlFragment.contains("$not-math$ [^note]"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("marklook-math"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("footnote-ref"), output.htmlFragment)
+    }
+
+    func testExtensionsStayLiteralInsideMultilineCodeSpan() async throws {
+        let source = """
+        `code starts
+        $not-math$ [^note]`
+
+        [^note]: Footnote
+        """
+
+        let output = try await render(source)
+
+        XCTAssertTrue(output.htmlFragment.contains("$not-math$ [^note]"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("marklook-math"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("footnote-ref"), output.htmlFragment)
+    }
+
+    func testCodeSpanCannotCrossFromATXHeadingIntoFollowingParagraph() async throws {
+        let source = """
+        # `heading
+        Paragraph $x$ and [^note]`
+        [^note]: Footnote body
+        """
+
+        let output = try await render(source)
+
+        XCTAssertTrue(output.htmlFragment.contains("marklook-math"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("footnote-ref"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("Footnote body"), output.htmlFragment)
+    }
+
+    func testFootnoteDefinitionCannotClosePreviousParagraphCodeSpan() async throws {
+        let source = """
+        `literal
+        [^note]: Footnote body`
+        Reference [^note].
+        """
+
+        let output = try await render(source)
+
+        XCTAssertTrue(output.htmlFragment.contains("footnote-ref"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("Footnote body"), output.htmlFragment)
+    }
+
+    func testOrderedMarkerAboveOneKeepsValidParagraphCodeSpan() async throws {
+        let source = """
+        Paragraph `code
+        2. $not-math$`
+        """
+
+        let output = try await render(source)
+
+        XCTAssertFalse(output.htmlFragment.contains("marklook-math"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("$not-math$"), output.htmlFragment)
+    }
+
+    func testRepeatedFootnoteReferenceIDsFollowSourceOrder() async throws {
+        let source = "First[^note] then second[^note].\n\n[^note]: Footnote"
+
+        for _ in 0..<32 {
+            let output = try await render(source)
+            let first = try XCTUnwrap(output.htmlFragment.range(of: "id=\"fnref-note\""))
+            let second = try XCTUnwrap(output.htmlFragment.range(of: "id=\"fnref-note-2\""))
+            XCTAssertLessThan(first.lowerBound, second.lowerBound, output.htmlFragment)
+            XCTAssertTrue(
+                output.htmlFragment.contains("class=\"footnote-backref\" href=\"#fnref-note\""),
+                output.htmlFragment
+            )
+        }
+    }
+
+    func testDistinctFootnoteLabelsCannotProduceDuplicateDOMIDs() async throws {
+        let source = "First[^a!] and second[^a?].\n\n[^a!]: One\n[^a?]: Two"
+
+        let output = try await render(source)
+        let footnoteIDs = try captures(
+            pattern: "<li id=\"(fn-[^\"]+)\"",
+            in: output.htmlFragment
+        )
+        let linkTargets = try captures(
+            pattern: "href=\"#(fn-[^\"]+)\"",
+            in: output.htmlFragment
+        )
+
+        XCTAssertEqual(footnoteIDs.count, 2, output.htmlFragment)
+        XCTAssertEqual(Set(footnoteIDs).count, 2, output.htmlFragment)
+        XCTAssertTrue(Set(footnoteIDs).isSubset(of: Set(linkTargets)), output.htmlFragment)
+    }
+
     private func render(
         _ source: String,
         lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks
@@ -108,5 +212,15 @@ final class MarkdownRenderingTests: XCTestCase {
                 markdownLineBreakMode: lineBreakMode
             )
         )
+    }
+
+    private func captures(pattern: String, in source: String) throws -> [String] {
+        let expression = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        return expression.matches(in: source, range: range).compactMap { match in
+            guard match.numberOfRanges > 1,
+                  let capture = Range(match.range(at: 1), in: source) else { return nil }
+            return String(source[capture])
+        }
     }
 }

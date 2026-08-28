@@ -49,7 +49,6 @@ final class WebViewStore: NSObject {
         documentURL: URL,
         scopes: [LocalResourceScope],
         resourceAuthority: String,
-        dependencyLoaded: @escaping @Sendable (URL) -> Void = { _ in },
         remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
         baseCSS = Self.asset(named: "Viewer", extension: "css") ?? ""
@@ -67,8 +66,7 @@ final class WebViewStore: NSObject {
         resourceHandler = LocalResourceSchemeHandler(
             documentURL: documentURL,
             scopes: scopes,
-            resourceAuthority: resourceAuthority,
-            dependencyLoaded: dependencyLoaded
+            resourceAuthority: resourceAuthority
         )
         remoteResourceHandler = RemoteResourceSchemeHandler(
             resourceAuthority: resourceAuthority,
@@ -115,7 +113,8 @@ final class WebViewStore: NSObject {
     func apply(
         output: RenderOutput,
         generation: ReloadGeneration,
-        explicitAnchor: String?
+        explicitAnchor: String?,
+        preserveScroll: Bool = true
     ) async throws -> WebViewUpdateResult {
         await waitUntilShellReady()
         let fineDiff = output.sizeClass != .lightweight
@@ -125,6 +124,7 @@ final class WebViewStore: NSObject {
                 "html": output.htmlFragment,
                 "generation": NSNumber(value: generation.rawValue),
                 "explicitAnchor": explicitAnchor as Any,
+                "preserveScroll": preserveScroll,
                 "containsMath": output.containsMath,
                 "useFineDiff": fineDiff,
                 "highlight": highlight,
