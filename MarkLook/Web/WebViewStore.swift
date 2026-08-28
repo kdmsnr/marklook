@@ -22,6 +22,59 @@ struct PersistedScrollState: Codable, Sendable {
 }
 
 @MainActor
+final class PDFExportAccessoryController: NSViewController {
+    static let pageNumbersIdentifier = NSUserInterfaceItemIdentifier("pdf.includePageNumbers")
+    private static let preferredSize = NSSize(width: 240, height: 34)
+
+    private let pageNumbersCheckbox = NSButton(
+        checkboxWithTitle: "Include Page Numbers",
+        target: nil,
+        action: nil
+    )
+
+    var includesPageNumbers: Bool {
+        get { pageNumbersCheckbox.state == .on }
+        set { pageNumbersCheckbox.state = newValue ? .on : .off }
+    }
+
+    init(includesPageNumbers: Bool = false) {
+        super.init(nibName: nil, bundle: nil)
+        self.includesPageNumbers = includesPageNumbers
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override func loadView() {
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.preferredSize))
+        preferredContentSize = Self.preferredSize
+        pageNumbersCheckbox.identifier = Self.pageNumbersIdentifier
+        pageNumbersCheckbox.setAccessibilityIdentifier(Self.pageNumbersIdentifier.rawValue)
+        pageNumbersCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(pageNumbersCheckbox)
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
+            pageNumbersCheckbox.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            pageNumbersCheckbox.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -12),
+            pageNumbersCheckbox.topAnchor.constraint(equalTo: container.topAnchor, constant: 8),
+            pageNumbersCheckbox.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+        ])
+        view = container
+    }
+}
+
+final class ViewerWebView: WKWebView {
+    static let suppressPageHeaderKey = NSPrintInfo.AttributeKey("MarkLookSuppressPageHeader")
+
+    override var pageHeader: NSAttributedString {
+        guard NSPrintOperation.current?.printInfo.dictionary()[Self.suppressPageHeaderKey] as? Bool == true
+        else { return super.pageHeader }
+        return NSAttributedString(string: "")
+    }
+}
+
+@MainActor
 final class WebViewStore: NSObject {
     static let contentWorld = WKContentWorld.world(name: "MarkLookApp")
     static let contentSecurityPolicy = "default-src 'none'; connect-src 'none'; script-src 'none'; worker-src 'none'; child-src 'none'; img-src mark-resource: mark-remote-resource:; style-src 'unsafe-inline' mark-resource: mark-remote-resource:; font-src mark-resource: mark-remote-resource:; media-src mark-resource: mark-remote-resource:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'none'"
@@ -91,7 +144,7 @@ final class WebViewStore: NSObject {
         userContentController.addUserScript(userScript)
         configuration.userContentController = userContentController
 
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = ViewerWebView(frame: .zero, configuration: configuration)
         super.init()
 
         webView.navigationDelegate = self
@@ -268,11 +321,16 @@ final class WebViewStore: NSObject {
         options.formUnion([.showsPaperSize, .showsOrientation])
         options.remove(.requestsParentDirectory)
         panel.options = options
+        let accessoryController = PDFExportAccessoryController()
+        panel.accessoryController = accessoryController
         pdfPanel = panel
         panel.beginSheet(with: pdfInfo, modalFor: window) { [self] response in
             pdfPanel = nil
             guard response == NSApplication.ModalResponse.OK.rawValue,
-                  let printInfo = Self.pdfPrintInfo(for: pdfInfo),
+                  let printInfo = Self.pdfPrintInfo(
+                      for: pdfInfo,
+                      includesPageNumbers: accessoryController.includesPageNumbers
+                  ),
                   NSPrintOperation.current == nil,
                   webView.window === window
             else {
@@ -314,7 +372,10 @@ final class WebViewStore: NSObject {
         return printInfo
     }
 
-    static func pdfPrintInfo(for pdfInfo: NSPDFInfo) -> NSPrintInfo? {
+    static func pdfPrintInfo(
+        for pdfInfo: NSPDFInfo,
+        includesPageNumbers: Bool = false
+    ) -> NSPrintInfo? {
         guard let destinationURL = pdfInfo.url,
               destinationURL.isFileURL,
               !destinationURL.lastPathComponent.isEmpty,
@@ -325,17 +386,22 @@ final class WebViewStore: NSObject {
         printInfo.takeSettings(from: pdfInfo)
         printInfo.jobDisposition = .save
         printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = destinationURL as NSURL
-        printInfo.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] = false
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] = includesPageNumbers
+        if includesPageNumbers {
+            printInfo.dictionary()[ViewerWebView.suppressPageHeaderKey] = true
+        }
         return printInfo
     }
 
     @objc
-    private func pdfExportDidFinish(
+    private nonisolated func pdfExportDidFinish(
         _: NSPrintOperation,
         success _: Bool,
         contextInfo _: UnsafeMutableRawPointer?
     ) {
-        finishPDFExport()
+        Task { @MainActor [self] in
+            finishPDFExport()
+        }
     }
 
     private func finishPDFExport() {

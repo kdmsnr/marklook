@@ -92,6 +92,17 @@ final class MarkLookScaffoldUITests: XCTestCase {
         let panel = application.sheets["save-panel"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
 
+        let pageNumbersCheckbox = panel.checkBoxes["pdf.includePageNumbers"]
+        if !pageNumbersCheckbox.waitForExistence(timeout: 1) {
+            let optionsButton = panel.buttons["OptionsButton"]
+            XCTAssertTrue(optionsButton.waitForExistence(timeout: 3))
+            optionsButton.click()
+        }
+        XCTAssertTrue(pageNumbersCheckbox.waitForExistence(timeout: 3))
+        XCTAssertEqual(pageNumbersCheckbox.value as? Int, 0)
+        pageNumbersCheckbox.click()
+        XCTAssertEqual(pageNumbersCheckbox.value as? Int, 1)
+
         let cancelButton = panel.buttons["CancelButton"]
         XCTAssertTrue(cancelButton.waitForExistence(timeout: 5))
 

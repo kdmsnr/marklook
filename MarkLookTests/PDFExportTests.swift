@@ -61,6 +61,50 @@ final class PDFExportTests: XCTestCase {
         )
     }
 
+    func testPageNumberOptionControlsStandardPrintFooter() throws {
+        let destinationURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("numbered-destination.pdf")
+        let pdfInfo = NSPDFInfo()
+        pdfInfo.url = destinationURL
+
+        let withoutPageNumbers = try XCTUnwrap(
+            WebViewStore.pdfPrintInfo(for: pdfInfo, includesPageNumbers: false)
+        )
+        let withPageNumbers = try XCTUnwrap(
+            WebViewStore.pdfPrintInfo(for: pdfInfo, includesPageNumbers: true)
+        )
+
+        XCTAssertEqual(
+            withoutPageNumbers.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            withPageNumbers.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] as? Bool,
+            true
+        )
+        XCTAssertNil(withoutPageNumbers.dictionary()[ViewerWebView.suppressPageHeaderKey])
+        XCTAssertEqual(
+            withPageNumbers.dictionary()[ViewerWebView.suppressPageHeaderKey] as? Bool,
+            true
+        )
+    }
+
+    func testPDFExportAccessoryDefaultsToPageNumbersOff() {
+        let controller = PDFExportAccessoryController()
+
+        XCTAssertFalse(controller.includesPageNumbers)
+        _ = controller.view
+        XCTAssertGreaterThan(controller.view.frame.width, 0)
+        XCTAssertGreaterThan(controller.view.frame.height, 0)
+        XCTAssertEqual(
+            controller.view.firstDescendant(with: PDFExportAccessoryController.pageNumbersIdentifier)?.identifier,
+            PDFExportAccessoryController.pageNumbersIdentifier
+        )
+
+        controller.includesPageNumbers = true
+        XCTAssertTrue(controller.includesPageNumbers)
+    }
+
     func testPDFPanelSettingsRejectMissingAndDirectoryDestinations() {
         let pdfInfo = NSPDFInfo()
         XCTAssertNil(WebViewStore.pdfPrintInfo(for: pdfInfo))
@@ -158,6 +202,71 @@ final class PDFExportTests: XCTestCase {
         XCTAssertTrue(document.string?.contains("Searchable paragraph") == true)
     }
 
+    func testPrintOperationProducesPageNumbers() async throws {
+        let webView = ViewerWebView(
+            frame: NSRect(x: 0, y: 0, width: 612, height: 792)
+        )
+        let navigation = PDFNavigationWaiter()
+        let paragraphs = (1 ... 120)
+            .map { "<p>Printable paragraph \($0).</p>" }
+            .joined()
+        try await navigation.load(
+            "<html><body><h1>Numbered Fixture</h1>\(paragraphs)</body></html>",
+            in: webView
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 612, height: 792),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = webView
+
+        let destinationURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("numbered-print-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: destinationURL) }
+        let pdfInfo = NSPDFInfo()
+        pdfInfo.url = destinationURL
+        let printInfo = try XCTUnwrap(
+            WebViewStore.pdfPrintInfo(for: pdfInfo, includesPageNumbers: true)
+        )
+        let operation = webView.printOperation(with: printInfo)
+        operation.jobTitle = "Numbered Fixture"
+        operation.showsPrintPanel = false
+        operation.showsProgressPanel = false
+
+        let finished = expectation(description: "PDF print operation finished")
+        let delegate = PDFPrintOperationDelegate(expectation: finished)
+        operation.runModal(
+            for: window,
+            delegate: delegate,
+            didRun: #selector(PDFPrintOperationDelegate.didFinish(_:success:contextInfo:)),
+            contextInfo: nil
+        )
+        await fulfillment(of: [finished], timeout: 15)
+        XCTAssertTrue(delegate.success)
+
+        let document = try XCTUnwrap(PDFDocument(url: destinationURL))
+        XCTAssertGreaterThan(document.pageCount, 1)
+        for index in 0 ..< document.pageCount {
+            XCTAssertTrue(
+                document.page(at: index)?.string?.contains(
+                    "Page \(index + 1) of \(document.pageCount)"
+                ) == true
+            )
+        }
+        XCTAssertFalse(document.page(at: 1)?.string?.contains("Numbered Fixture") == true)
+
+        let attachment = XCTAttachment(
+            data: try Data(contentsOf: destinationURL),
+            uniformTypeIdentifier: "com.adobe.pdf"
+        )
+        attachment.name = "numbered-print.pdf"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func bundledTextResource(named fileName: String) throws -> String {
         let root = try XCTUnwrap(Bundle.main.resourceURL)
         let enumerator = try XCTUnwrap(
@@ -172,6 +281,38 @@ final class PDFExportTests: XCTestCase {
         }
         XCTFail("Missing bundled resource: \(fileName)")
         return ""
+    }
+}
+
+@MainActor
+private final class PDFPrintOperationDelegate: NSObject {
+    private let expectation: XCTestExpectation
+    private(set) var success = false
+
+    init(expectation: XCTestExpectation) {
+        self.expectation = expectation
+    }
+
+    @objc
+    nonisolated func didFinish(
+        _: NSPrintOperation,
+        success: Bool,
+        contextInfo _: UnsafeMutableRawPointer?
+    ) {
+        Task { @MainActor [self] in
+            self.success = success
+            self.expectation.fulfill()
+        }
+    }
+}
+
+private extension NSView {
+    func firstDescendant(with identifier: NSUserInterfaceItemIdentifier) -> NSView? {
+        if self.identifier == identifier { return self }
+        for subview in subviews {
+            if let match = subview.firstDescendant(with: identifier) { return match }
+        }
+        return nil
     }
 }
 
