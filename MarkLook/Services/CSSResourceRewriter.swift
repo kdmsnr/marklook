@@ -64,6 +64,14 @@ struct CSSResourceRewriter: Sendable {
         stylesheetURL: URL,
         resourceAuthority: String
     ) -> String? {
+        if stylesheetURL.scheme?.lowercased() == "https" {
+            return remoteResourceURL(
+                raw,
+                stylesheetURL: stylesheetURL,
+                resourceAuthority: resourceAuthority
+            )
+        }
+
         guard !raw.isEmpty,
               !raw.hasPrefix("//"),
               hasValidPercentEncoding(raw),
@@ -92,6 +100,27 @@ struct CSSResourceRewriter: Sendable {
         components.path = "/open"
         components.queryItems = [URLQueryItem(name: "source", value: absolute.absoluteString)]
         return components.url?.absoluteString
+    }
+
+    private func remoteResourceURL(
+        _ raw: String,
+        stylesheetURL: URL,
+        resourceAuthority: String
+    ) -> String? {
+        guard !raw.isEmpty, hasValidPercentEncoding(raw) else { return nil }
+        if raw.hasPrefix("#") { return raw }
+        guard let resolved = URL(string: raw, relativeTo: stylesheetURL)?.absoluteURL,
+              resolved.scheme?.lowercased() == "https",
+              resolved.host != nil,
+              resolved.user == nil,
+              resolved.password == nil,
+              resolved.port == nil || resolved.port == 443,
+              let rewritten = RemoteResourceURL.make(
+                  sourceURL: resolved,
+                  authority: resourceAuthority
+              )
+        else { return nil }
+        return rewritten.absoluteString
     }
 
     private func hasValidPercentEncoding(_ value: String) -> Bool {

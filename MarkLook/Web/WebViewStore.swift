@@ -24,11 +24,12 @@ struct PersistedScrollState: Codable, Sendable {
 @MainActor
 final class WebViewStore: NSObject {
     static let contentWorld = WKContentWorld.world(name: "MarkLookApp")
-    static let contentSecurityPolicy = "default-src 'none'; connect-src 'none'; script-src 'none'; worker-src 'none'; child-src 'none'; img-src mark-resource:; style-src 'unsafe-inline' mark-resource:; font-src mark-resource:; media-src mark-resource:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'none'"
+    static let contentSecurityPolicy = "default-src 'none'; connect-src 'none'; script-src 'none'; worker-src 'none'; child-src 'none'; img-src mark-resource: mark-remote-resource:; style-src 'unsafe-inline' mark-resource: mark-remote-resource:; font-src mark-resource: mark-remote-resource:; media-src mark-resource: mark-remote-resource:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'none'"
     private static var outputOperationInProgress = false
 
     let webView: WKWebView
     let resourceHandler: LocalResourceSchemeHandler
+    let remoteResourceHandler: RemoteResourceSchemeHandler
 
     var onDocumentNavigation: ((WebNavigationRequest) -> Void)?
     var onNavigationFailure: ((String) -> Void)?
@@ -48,7 +49,8 @@ final class WebViewStore: NSObject {
         documentURL: URL,
         scopes: [LocalResourceScope],
         resourceAuthority: String,
-        dependencyLoaded: @escaping @Sendable (URL) -> Void
+        dependencyLoaded: @escaping @Sendable (URL) -> Void = { _ in },
+        remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
         baseCSS = Self.asset(named: "Viewer", extension: "css") ?? ""
         katexCSS = Self.rewriteBundledKaTeXFonts(Self.asset(named: "katex.min", extension: "css") ?? "")
@@ -68,11 +70,19 @@ final class WebViewStore: NSObject {
             resourceAuthority: resourceAuthority,
             dependencyLoaded: dependencyLoaded
         )
+        remoteResourceHandler = RemoteResourceSchemeHandler(
+            resourceAuthority: resourceAuthority,
+            policy: remoteContentPolicy
+        )
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.setURLSchemeHandler(resourceHandler, forURLScheme: "mark-resource")
+        configuration.setURLSchemeHandler(
+            remoteResourceHandler,
+            forURLScheme: RemoteResourceURL.scheme
+        )
         let userContentController = WKUserContentController()
         let userScript = WKUserScript(
             source: [katex, highlighter, runtime].joined(separator: "\n;\n"),
@@ -96,6 +106,10 @@ final class WebViewStore: NSObject {
 
     func updateAccess(documentURL: URL, scopes: [LocalResourceScope]) {
         resourceHandler.update(documentURL: documentURL, scopes: scopes)
+    }
+
+    func updateRemoteContentPolicy(_ policy: RemoteContentPolicy) {
+        remoteResourceHandler.update(policy: policy)
     }
 
     func apply(
@@ -434,7 +448,7 @@ extension WebViewStore: WKNavigationDelegate {
             decisionHandler(.allow)
             return
         }
-        if url.scheme == "mark-resource" {
+        if url.scheme == "mark-resource" || url.scheme == RemoteResourceURL.scheme {
             // Subresources are handled directly by WKURLSchemeHandler. Never allow the resource
             // scheme to become a navigated document in any frame.
             decisionHandler(.cancel)

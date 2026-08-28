@@ -46,6 +46,7 @@ final class DocumentSession {
     @ObservationIgnored private var presentationGate = ReloadPresentationGate()
     @ObservationIgnored private var monitoringIssue: ViewerIssue?
     @ObservationIgnored private var markdownLineBreakMode: MarkdownLineBreakMode
+    @ObservationIgnored private var remoteContentPolicy: RemoteContentPolicy
     @ObservationIgnored private var shouldOpenInCurrentWindow: ((URL, URL) -> Bool)?
 
     init(
@@ -53,7 +54,8 @@ final class DocumentSession {
         renderer: any RenderEngine = GFMRenderEngine(),
         bookmarkStore: BookmarkStore = BookmarkStore(),
         recentDocuments: RecentDocuments = .shared,
-        markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks
+        markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
         let rootURL = Self.normalizedDocumentURL(documentURL)
         let restoredNavigation = Self.persistedNavigation(for: rootURL)
@@ -63,6 +65,7 @@ final class DocumentSession {
         self.bookmarkStore = bookmarkStore
         self.recentDocuments = recentDocuments
         self.markdownLineBreakMode = markdownLineBreakMode
+        self.remoteContentPolicy = remoteContentPolicy
         dependencyTracker = DependencyTracker()
         rootDocumentURL = rootURL
         resourceAuthority = UUID().uuidString.lowercased()
@@ -79,7 +82,8 @@ final class DocumentSession {
             documentURL: initialURL,
             scopes: scopes,
             resourceAuthority: resourceAuthority,
-            dependencyLoaded: { [dependencyTracker] url in dependencyTracker.record(url) }
+            dependencyLoaded: { [dependencyTracker] url in dependencyTracker.record(url) },
+            remoteContentPolicy: remoteContentPolicy
         )
         webViewStore.setZoom(zoom)
         webViewStore.onDocumentNavigation = { [weak self] request in
@@ -134,6 +138,17 @@ final class DocumentSession {
     func setMarkdownLineBreakMode(_ mode: MarkdownLineBreakMode) {
         guard markdownLineBreakMode != mode else { return }
         markdownLineBreakMode = mode
+        if didStart {
+            configureReloadPipeline()
+        }
+    }
+
+    func setRemoteContentPolicy(_ policy: RemoteContentPolicy) {
+        guard remoteContentPolicy != policy else { return }
+        remoteContentPolicy = policy
+        // Revoke the network boundary before replacing the rendered document so removed hosts
+        // cannot finish an in-flight request during the next render.
+        webViewStore.updateRemoteContentPolicy(policy)
         if didStart {
             configureReloadPipeline()
         }
@@ -270,6 +285,7 @@ final class DocumentSession {
         let renderer = self.renderer
         let contextAuthority = resourceAuthority
         let markdownLineBreakMode = self.markdownLineBreakMode
+        let remoteContentPolicy = self.remoteContentPolicy
         let scheduler = ReloadScheduler<PreparedDocument>(fileURL: url) { input in
             let clock = ContinuousClock()
             let decodeStarted = clock.now
@@ -287,7 +303,8 @@ final class DocumentSession {
                     documentURL: input.fileURL,
                     resourceAuthority: contextAuthority,
                     sizeClass: sizeClass,
-                    markdownLineBreakMode: markdownLineBreakMode
+                    markdownLineBreakMode: markdownLineBreakMode,
+                    remoteContentPolicy: remoteContentPolicy
                 )
             )
             let renderDuration = renderStarted.duration(to: clock.now)

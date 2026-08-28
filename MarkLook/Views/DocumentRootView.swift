@@ -8,6 +8,8 @@ struct DocumentRootView: View {
     private var usesFullContentWidth = false
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
+    @AppStorage(RemoteContentPreferences.allowedHostsKey)
+    private var storedRemoteContentHosts = RemoteContentPreferences.defaultStoredValue
     @State private var sessionOwner = DocumentSessionOwner()
     @State private var warningsArePresented = false
     private let documentURL: URL
@@ -75,6 +77,7 @@ struct DocumentRootView: View {
             session.setCurrentWindowNavigationPolicy(Self.shouldOpenInCurrentWindow)
             session.setContentWidth(effectiveContentWidth)
             session.setMarkdownLineBreakMode(markdownLineBreakMode)
+            session.setRemoteContentPolicy(remoteContentPolicy)
             session.start()
             currentURLDidChange(session.currentURL)
         }
@@ -83,6 +86,9 @@ struct DocumentRootView: View {
         }
         .onChange(of: markdownLineBreakMode) { _, mode in
             session.setMarkdownLineBreakMode(mode)
+        }
+        .onChange(of: remoteContentPolicy) { _, policy in
+            session.setRemoteContentPolicy(policy)
         }
         .onDisappear { session.persistViewState() }
         .onChange(of: scenePhase) { _, phase in
@@ -174,6 +180,10 @@ struct DocumentRootView: View {
 
     private var markdownLineBreakMode: MarkdownLineBreakMode {
         MarkdownRenderingPreferences.lineBreakMode(storedValue: storedMarkdownLineBreakMode)
+    }
+
+    private var remoteContentPolicy: RemoteContentPolicy {
+        RemoteContentPolicy(storedValue: storedRemoteContentHosts)
     }
 
     private var uiTestControls: some View {

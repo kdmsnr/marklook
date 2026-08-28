@@ -16,11 +16,12 @@ struct HTMLSanitizerTiming: Sendable, Equatable {
     let serializing: Duration
 }
 
-/// Parses untrusted HTML as a static document, rewrites every local URL onto the
+/// Parses untrusted HTML as a static document, rewrites every permitted URL onto the
 /// app-owned resource/navigation schemes, and finally applies SwiftSoup's maintained
 /// allow-list cleaner. No document script is passed to WebKit.
 struct HTMLSanitizer: Sendable {
     private let resourceScheme = "mark-resource"
+    private let remoteResourceScheme = RemoteResourceURL.scheme
     private let navigationScheme = "mark-navigation"
 
     func sanitize(_ input: String, context: RenderContext) throws -> SanitizedHTML {
@@ -135,12 +136,12 @@ struct HTMLSanitizer: Sendable {
         try whitelist.addAttributes("source", "src", "type", "media")
         try whitelist.addProtocols("a", "href", "http", "https", "#", navigationScheme)
         try whitelist.addProtocols("blockquote", "cite", "http", "https")
-        try whitelist.addProtocols("img", "src", resourceScheme)
-        try whitelist.addProtocols("link", "href", resourceScheme)
-        try whitelist.addProtocols("audio", "src", resourceScheme)
-        try whitelist.addProtocols("video", "src", resourceScheme)
-        try whitelist.addProtocols("video", "poster", resourceScheme)
-        try whitelist.addProtocols("source", "src", resourceScheme)
+        try whitelist.addProtocols("img", "src", resourceScheme, remoteResourceScheme)
+        try whitelist.addProtocols("link", "href", resourceScheme, remoteResourceScheme)
+        try whitelist.addProtocols("audio", "src", resourceScheme, remoteResourceScheme)
+        try whitelist.addProtocols("video", "src", resourceScheme, remoteResourceScheme)
+        try whitelist.addProtocols("video", "poster", resourceScheme, remoteResourceScheme)
+        try whitelist.addProtocols("source", "src", resourceScheme, remoteResourceScheme)
         whitelist.preserveRelativeLinks(true)
         return whitelist
     }
@@ -241,9 +242,25 @@ struct HTMLSanitizer: Sendable {
         resources: inout Set<ResourceReference>
     ) -> String? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, !value.hasPrefix("//") else { return nil }
-        if let parsed = URL(string: value), let scheme = parsed.scheme?.lowercased(), scheme != "file" {
-            return nil
+        guard !value.isEmpty else { return nil }
+
+        let schemeRelativeRemoteURL = value.hasPrefix("//")
+            ? URL(string: "https:\(value)")
+            : nil
+        let parsedURL = URL(string: value)
+        let explicitRemoteURL = parsedURL.flatMap { parsed -> URL? in
+            guard let scheme = parsed.scheme?.lowercased(), scheme != "file" else { return nil }
+            return parsed
+        }
+        if let remoteURL = schemeRelativeRemoteURL ?? explicitRemoteURL {
+            guard context.remoteContentPolicy.allows(remoteURL),
+                  let rewritten = RemoteResourceURL.make(
+                      sourceURL: remoteURL,
+                      authority: context.resourceAuthority
+                  )
+            else { return nil }
+            resources.insert(.init(source: remoteURL.absoluteString, resolvedURL: nil, kind: kind))
+            return rewritten.absoluteString
         }
         let resolved = resolveLocal(value, relativeTo: context.documentURL)
         guard let rewritten = ownedSchemeURL(

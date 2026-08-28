@@ -19,6 +19,7 @@ final class WebViewSecurityConfigurationTests: XCTestCase {
         XCTAssertFalse(configuration.defaultWebpagePreferences.allowsContentJavaScript)
         XCTAssertFalse(configuration.preferences.javaScriptCanOpenWindowsAutomatically)
         XCTAssertNotNil(configuration.urlSchemeHandler(forURLScheme: "mark-resource"))
+        XCTAssertNotNil(configuration.urlSchemeHandler(forURLScheme: RemoteResourceURL.scheme))
         XCTAssertNil(configuration.urlSchemeHandler(forURLScheme: "http"))
         XCTAssertNil(configuration.urlSchemeHandler(forURLScheme: "https"))
         XCTAssertFalse(store.webView.isInspectable)
@@ -47,10 +48,10 @@ final class WebViewSecurityConfigurationTests: XCTestCase {
             "base-uri 'none'",
             "form-action 'none'",
             "manifest-src 'none'",
-            "img-src mark-resource:",
-            "font-src mark-resource:",
-            "media-src mark-resource:",
-            "style-src 'unsafe-inline' mark-resource:",
+            "img-src mark-resource: mark-remote-resource:",
+            "font-src mark-resource: mark-remote-resource:",
+            "media-src mark-resource: mark-remote-resource:",
+            "style-src 'unsafe-inline' mark-resource: mark-remote-resource:",
         ] {
             XCTAssertTrue(directives.contains(required), "Missing CSP directive: \(required)")
         }
