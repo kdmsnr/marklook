@@ -121,6 +121,8 @@
     state.content = content;
     applyContentWidth(state.contentWidth, state.contentWidthRevision);
 
+    state.content.addEventListener("click", handleFragmentLinkClick);
+
     for (const eventName of ["wheel", "mousedown", "keydown", "touchstart"]) {
       window.addEventListener(eventName, event => {
         if (event.isTrusted) state.interactionVersion += 1;
@@ -290,6 +292,31 @@
     return state.root.getElementById(anchor) || state.content.querySelector(`[data-marklook-anchor="${escaped}"]`);
   }
 
+  function decodedFragment(fragment) {
+    try {
+      return decodeURIComponent(fragment);
+    } catch {
+      return fragment;
+    }
+  }
+
+  function navigateAnchor(anchor) {
+    ensureRoot("", "", "");
+    const element = elementForAnchor(anchor);
+    if (!element) return false;
+    element.scrollIntoView({ block: "start" });
+    history.replaceState(null, "", `#${encodeURIComponent(anchor)}`);
+    return true;
+  }
+
+  function handleFragmentLinkClick(event) {
+    const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+    const href = link?.getAttribute("href");
+    if (!href?.startsWith("#")) return;
+    if (!navigateAnchor(decodedFragment(href.slice(1)))) return;
+    event.preventDefault();
+  }
+
   function restoreScroll(snapshot, explicitAnchor) {
     const scrollElement = document.scrollingElement || document.documentElement;
     const requested = elementForAnchor(explicitAnchor || snapshot.fragment);
@@ -414,14 +441,7 @@
       }
     },
 
-    navigateAnchor(anchor) {
-      ensureRoot("", "", "");
-      const element = elementForAnchor(anchor);
-      if (!element) return false;
-      element.scrollIntoView({ block: "start" });
-      history.replaceState(null, "", `#${encodeURIComponent(anchor)}`);
-      return true;
-    },
+    navigateAnchor,
 
     async invalidateResources(sources, revision) {
       await beginExclusiveLayoutChange();
