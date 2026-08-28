@@ -6,10 +6,10 @@ APP_NAME="MarkLook"
 BUNDLE_ID="com.example.MarkLook"
 
 case "$MODE" in
-    open|--open|run|--run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify)
+    open|--open|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify)
         ;;
     *)
-        echo "usage: $0 [open|--run|--debug|--logs|--telemetry|--verify]" >&2
+        echo "usage: $0 [open|--debug|--logs|--telemetry|--verify]" >&2
         exit 2
         ;;
 esac
@@ -58,13 +58,9 @@ case "$MODE" in
         echo "Drag $APP_NAME.app to the Applications folder to install it."
         /usr/bin/open -R "$APP_BUNDLE"
         ;;
-    run|--run)
-        stop_app
-        open_app
-        ;;
     --debug|debug)
         stop_app
-        exec /usr/bin/xcrun lldb -- "$APP_BINARY"
+        open_app
         ;;
     --logs|logs)
         stop_app

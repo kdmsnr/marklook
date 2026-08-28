@@ -18,12 +18,12 @@ cd marklook
 
 ## 開発
 
-Xcode 26以降が必要です。
+Xcode 26以降が必要です。Debugビルドを作成して起動します。
 
 ```sh
 git clone https://github.com/kdmsnr/marklook.git
 cd marklook
-./script/build.sh --run
+./script/build.sh --debug
 ```
 
 テスト：
