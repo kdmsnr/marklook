@@ -56,6 +56,54 @@ final class MarkLookScaffoldUITests: XCTestCase {
     }
 
     @MainActor
+    func testPDFExportMenuIsDisabledWithoutAReadyDocument() {
+        let application = launchApplication()
+        XCTAssertTrue(application.buttons["welcome.open"].waitForExistence(timeout: 5))
+
+        application.menuBars.menuBarItems["File"].click()
+        let exportItem = application.menuItems["Export as PDF…"]
+
+        XCTAssertTrue(exportItem.waitForExistence(timeout: 3))
+        XCTAssertFalse(exportItem.isEnabled)
+    }
+
+    @MainActor
+    func testPDFExportMenuIsEnabledForAReadyDocument() {
+        let application = launchApplication(scenario: "open")
+        XCTAssertTrue(application.staticTexts["Ready"].waitForExistence(timeout: 8))
+
+        application.menuBars.menuBarItems["File"].click()
+        let exportItem = application.menuItems["Export as PDF…"]
+
+        XCTAssertTrue(exportItem.waitForExistence(timeout: 3))
+        XCTAssertTrue(exportItem.isEnabled)
+    }
+
+    @MainActor
+    func testPDFExportPanelUsesSourceNameAndCanBeCancelled() {
+        let application = launchApplication(scenario: "open")
+        XCTAssertTrue(application.staticTexts["Ready"].waitForExistence(timeout: 8))
+
+        application.menuBars.menuBarItems["File"].click()
+        let exportItem = application.menuItems["Export as PDF…"]
+        XCTAssertTrue(exportItem.waitForExistence(timeout: 3))
+        exportItem.click()
+
+        let panel = application.sheets["save-panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+
+        let cancelButton = panel.buttons["CancelButton"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 5))
+
+        let nameField = panel.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        XCTAssertEqual(nameField.value as? String, "open-fixture.pdf")
+
+        cancelButton.click()
+        XCTAssertTrue(panel.waitForNonExistence(timeout: 3))
+    }
+
+    @MainActor
     func testScrollPositionSurvivesAtomicReload() throws {
         let application = launchApplication(scenario: "scroll")
         XCTAssertTrue(application.staticTexts["Scroll fixture version one"].waitForExistence(timeout: 8))

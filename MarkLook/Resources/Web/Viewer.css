@@ -181,13 +181,18 @@ input[type="checkbox"] {
 .footnote-backref { margin-left: 0.35em; }
 
 @media print {
+  :host { color-scheme: light; }
   #document-content { max-width: none; padding: 0; }
   a { color: inherit; text-decoration: underline; }
   details.callout:not([open]) > .callout-content { display: block !important; }
   details.callout > summary.callout-title { cursor: default; display: block; }
   details.callout > summary.callout-title::marker { content: ""; }
   details.callout > summary.callout-title::-webkit-details-marker { display: none; }
-  pre { white-space: pre-wrap; }
+  h1, h2, h3, h4, h5, h6 { break-after: avoid-page; }
+  blockquote, details.callout, figure, img, pre, tr { break-inside: avoid-page; }
+  pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+  table { display: table; overflow: visible; width: 100%; }
+  thead { display: table-header-group; }
 }
 
 @media (prefers-reduced-motion: reduce) {

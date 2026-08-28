@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class DocumentSession {
     private(set) var currentURL: URL
+    private(set) var displayedURL: URL?
     private(set) var phase: ViewerPhase = .loading
     private(set) var issue: ViewerIssue?
     private(set) var warnings: [RenderWarning] = []
@@ -14,6 +15,7 @@ final class DocumentSession {
     private(set) var zoom: Double
     private(set) var canGoBack = false
     private(set) var canGoForward = false
+    private(set) var isExportingPDF = false
     var isFindPresented = false
     var findQuery = ""
     var openDocumentRequest: OpenDocumentRequest?
@@ -160,6 +162,15 @@ final class DocumentSession {
 
     func printDocument() {
         webViewStore.printDocument()
+    }
+
+    func exportPDF() {
+        guard let displayedURL, !isExportingPDF else { return }
+        isExportingPDF = true
+        let started = webViewStore.exportPDF(documentURL: displayedURL) { [weak self] in
+            self?.isExportingPDF = false
+        }
+        if !started { isExportingPDF = false }
     }
 
     func goBack() {
@@ -375,6 +386,7 @@ final class DocumentSession {
                 guard presentationGate.accepts(presentationTicket) else { return }
                 currentResources = snapshot.output.renderOutput.resources
                 warnings = result.warnings + resourceWarnings(for: currentResources)
+                displayedURL = currentURL
                 phase = .ready
                 issue = monitoringIssue
                 finishActivity()

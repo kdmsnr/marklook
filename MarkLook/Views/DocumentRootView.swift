@@ -159,6 +159,8 @@ struct DocumentRootView: View {
             resetZoom: session.resetZoom,
             goBack: session.goBack,
             goForward: session.goForward,
+            exportPDF: session.exportPDF,
+            canExportPDF: session.displayedURL != nil && !session.isExportingPDF,
             printDocument: session.printDocument
         )
     }

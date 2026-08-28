@@ -25,6 +25,7 @@ struct PersistedScrollState: Codable, Sendable {
 final class WebViewStore: NSObject {
     static let contentWorld = WKContentWorld.world(name: "MarkLookApp")
     static let contentSecurityPolicy = "default-src 'none'; connect-src 'none'; script-src 'none'; worker-src 'none'; child-src 'none'; img-src mark-resource:; style-src 'unsafe-inline' mark-resource:; font-src mark-resource:; media-src mark-resource:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'none'"
+    private static var outputOperationInProgress = false
 
     let webView: WKWebView
     let resourceHandler: LocalResourceSchemeHandler
@@ -39,6 +40,9 @@ final class WebViewStore: NSObject {
     private var shellWaiters: [CheckedContinuation<Void, Never>] = []
     private var contentWidth: Double? = ViewerLayoutPreferences.defaultContentWidth
     private var contentWidthRevision: UInt64 = 0
+    private var pdfExportInProgress = false
+    private var pdfExportCompletion: (() -> Void)?
+    private var pdfPanel: NSPDFPanel?
 
     init(
         documentURL: URL,
@@ -52,7 +56,7 @@ final class WebViewStore: NSObject {
             ?? Self.asset(named: "highlight", extension: "css")
             ?? ""
         let darkHighlightCSS = Self.asset(named: "github-dark.min", extension: "css") ?? ""
-        highlightCSS = lightHighlightCSS + "\n@media (prefers-color-scheme: dark) {\n\(darkHighlightCSS)\n}"
+        highlightCSS = lightHighlightCSS + "\n@media screen and (prefers-color-scheme: dark) {\n\(darkHighlightCSS)\n}"
 
         let runtime = Self.asset(named: "ViewerRuntime", extension: "js") ?? ""
         let katex = Self.asset(named: "katex.min", extension: "js") ?? ""
@@ -215,10 +219,118 @@ final class WebViewStore: NSObject {
     }
 
     func printDocument() {
+        guard !Self.outputOperationInProgress,
+              NSPrintOperation.current == nil
+        else { return }
+
+        Self.outputOperationInProgress = true
+        defer { Self.outputOperationInProgress = false }
         let operation = webView.printOperation(with: .init())
         operation.showsPrintPanel = true
         operation.showsProgressPanel = true
         operation.run()
+    }
+
+    @discardableResult
+    func exportPDF(documentURL: URL, completion: @escaping () -> Void) -> Bool {
+        guard !pdfExportInProgress,
+              !Self.outputOperationInProgress,
+              NSPrintOperation.current == nil,
+              let window = webView.window
+        else { return false }
+
+        Self.outputOperationInProgress = true
+        pdfExportInProgress = true
+        pdfExportCompletion = completion
+        let defaultFileName = Self.pdfDefaultFileName(for: documentURL)
+        let printInfo = Self.pdfPrintInfo()
+        let pdfInfo = NSPDFInfo()
+        pdfInfo.orientation = printInfo.orientation
+        pdfInfo.paperSize = printInfo.paperSize
+
+        let panel = NSPDFPanel()
+        panel.defaultFileName = defaultFileName
+        var options = panel.options
+        options.formUnion([.showsPaperSize, .showsOrientation])
+        options.remove(.requestsParentDirectory)
+        panel.options = options
+        pdfPanel = panel
+        panel.beginSheet(with: pdfInfo, modalFor: window) { [self] response in
+            pdfPanel = nil
+            guard response == NSApplication.ModalResponse.OK.rawValue,
+                  let printInfo = Self.pdfPrintInfo(for: pdfInfo),
+                  NSPrintOperation.current == nil,
+                  webView.window === window
+            else {
+                finishPDFExport()
+                return
+            }
+
+            let operation = webView.printOperation(with: printInfo)
+            operation.jobTitle = defaultFileName
+            operation.showsPrintPanel = false
+            operation.showsProgressPanel = true
+            operation.runModal(
+                for: window,
+                delegate: self,
+                didRun: #selector(pdfExportDidFinish(_:success:contextInfo:)),
+                contextInfo: nil
+            )
+        }
+        return true
+    }
+
+    static func pdfDefaultFileName(for documentURL: URL) -> String {
+        let fileName = documentURL.deletingPathExtension().lastPathComponent
+        return fileName.isEmpty ? "Document" : fileName
+    }
+
+    static func pdfPrintInfo() -> NSPrintInfo {
+        let printInfo = NSPrintInfo()
+        printInfo.jobDisposition = .save
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = false
+        printInfo.isVerticallyCentered = false
+        printInfo.leftMargin = 36
+        printInfo.rightMargin = 36
+        printInfo.topMargin = 36
+        printInfo.bottomMargin = 36
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] = false
+        return printInfo
+    }
+
+    static func pdfPrintInfo(for pdfInfo: NSPDFInfo) -> NSPrintInfo? {
+        guard let destinationURL = pdfInfo.url,
+              destinationURL.isFileURL,
+              !destinationURL.lastPathComponent.isEmpty,
+              (try? destinationURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+        else { return nil }
+
+        let printInfo = pdfPrintInfo()
+        printInfo.takeSettings(from: pdfInfo)
+        printInfo.jobDisposition = .save
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = destinationURL as NSURL
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.headerAndFooter] = false
+        return printInfo
+    }
+
+    @objc
+    private func pdfExportDidFinish(
+        _: NSPrintOperation,
+        success _: Bool,
+        contextInfo _: UnsafeMutableRawPointer?
+    ) {
+        finishPDFExport()
+    }
+
+    private func finishPDFExport() {
+        Self.outputOperationInProgress = false
+        pdfExportInProgress = false
+        pdfPanel = nil
+        let completion = pdfExportCompletion
+        pdfExportCompletion = nil
+        completion?()
     }
 
     private func loadShell() {
@@ -232,8 +344,11 @@ final class WebViewStore: NSObject {
             <style>
               html, body { background: #ffffff; color: #1f2328; margin: 0; min-height: 100%; }
               #content-host { min-height: 100vh; visibility: hidden; }
-              @media (prefers-color-scheme: dark) {
+              @media screen and (prefers-color-scheme: dark) {
                 html, body { background: #0d1117; color: #e6edf3; }
+              }
+              @media print {
+                html, body { background: #ffffff; color: #1f2328; }
               }
             </style>
           </head>

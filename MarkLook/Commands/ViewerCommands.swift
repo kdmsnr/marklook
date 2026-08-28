@@ -10,6 +10,8 @@ struct ViewerActions {
     let resetZoom: () -> Void
     let goBack: () -> Void
     let goForward: () -> Void
+    let exportPDF: () -> Void
+    let canExportPDF: Bool
     let printDocument: () -> Void
 }
 
@@ -73,6 +75,13 @@ struct ViewerCommands: Commands {
         }
 
         CommandGroup(replacing: .saveItem) {
+            Button("Export as PDF…") {
+                actions?.exportPDF()
+            }
+            .disabled(actions?.canExportPDF != true)
+
+            Divider()
+
             Button("Close Tab") {
                 WindowTabCoordinator.closeSelectedTab()
             }
