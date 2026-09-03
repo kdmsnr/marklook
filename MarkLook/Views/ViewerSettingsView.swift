@@ -13,6 +13,9 @@ struct ViewerSettingsView: View {
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
 
+    @AppStorage(MarkdownRenderingPreferences.showsFrontMatterKey)
+    private var showsFrontMatter = MarkdownRenderingPreferences.defaultShowsFrontMatter
+
     @AppStorage(RemoteContentPreferences.allowedHostsKey)
     private var storedAllowedHosts = RemoteContentPreferences.defaultStoredValue
 
@@ -63,6 +66,14 @@ struct ViewerSettingsView: View {
                 .pickerStyle(.radioGroup)
 
                 Text(markdownLineBreakModeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Show Front Matter", isOn: $showsFrontMatter)
+                    .accessibilityIdentifier("settings.showFrontMatter")
+
+                Text("Shows leading YAML metadata above the rendered document. Changes apply to open documents immediately.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -137,6 +148,7 @@ struct ViewerSettingsView: View {
                 usesFullWidth = false
                 storedFontFamily = ViewerFontPreferences.defaultFontFamily.rawValue
                 storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
+                showsFrontMatter = MarkdownRenderingPreferences.defaultShowsFrontMatter
                 storedAllowedHosts = RemoteContentPreferences.defaultStoredValue
                 allowedHostDraft = ""
                 allowedHostValidationMessage = nil
@@ -146,6 +158,7 @@ struct ViewerSettingsView: View {
                     && normalizedWidth == ViewerLayoutPreferences.defaultContentWidth
                     && storedFontFamily == ViewerFontPreferences.defaultFontFamily.rawValue
                     && storedMarkdownLineBreakMode == MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
+                    && showsFrontMatter == MarkdownRenderingPreferences.defaultShowsFrontMatter
                     && storedAllowedHosts == RemoteContentPreferences.defaultStoredValue
             )
         }

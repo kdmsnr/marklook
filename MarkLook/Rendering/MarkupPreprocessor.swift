@@ -21,6 +21,7 @@ struct MarkupPreprocessor: Sendable {
 
     struct Result: Sendable {
         let source: String
+        let frontMatter: String?
         let math: [MathReplacement]
         let footnotes: [Footnote]
         let footnoteReferences: [FootnoteReference]
@@ -36,6 +37,7 @@ struct MarkupPreprocessor: Sendable {
         guard markers.hasCarriageReturn || markers.hasExtension || startsWithFrontMatter else {
             return Result(
                 source: input,
+                frontMatter: nil,
                 math: [],
                 footnotes: [],
                 footnoteReferences: []
@@ -53,7 +55,7 @@ struct MarkupPreprocessor: Sendable {
 
         let frontMatterExtraction = startsWithFrontMatter
             ? frontMatter.extract(from: normalized)
-            : .init(body: normalized, found: false)
+            : .init(body: normalized, frontMatter: nil)
         let markdownSource = frontMatterExtraction.body
         let hasExtension = markers.hasExtension
             && (!frontMatterExtraction.found || scanMarkers(in: markdownSource).hasExtension)
@@ -61,6 +63,7 @@ struct MarkupPreprocessor: Sendable {
         guard hasExtension else {
             return Result(
                 source: markdownSource,
+                frontMatter: frontMatterExtraction.frontMatter,
                 math: [],
                 footnotes: [],
                 footnoteReferences: []
@@ -166,6 +169,7 @@ struct MarkupPreprocessor: Sendable {
 
         return Result(
             source: output.joined(separator: "\n"),
+            frontMatter: frontMatterExtraction.frontMatter,
             math: math,
             footnotes: extracted.footnotes,
             footnoteReferences: footnoteReferences

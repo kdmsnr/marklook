@@ -89,6 +89,7 @@ struct RenderContext: Sendable {
     let resourceAuthority: String
     let sizeClass: DocumentSizeClass
     let markdownLineBreakMode: MarkdownLineBreakMode
+    let showsFrontMatter: Bool
     let remoteContentPolicy: RemoteContentPolicy
 
     init(
@@ -96,12 +97,14 @@ struct RenderContext: Sendable {
         resourceAuthority: String,
         sizeClass: DocumentSizeClass,
         markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        showsFrontMatter: Bool = false,
         remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
         self.documentURL = documentURL
         self.resourceAuthority = resourceAuthority
         self.sizeClass = sizeClass
         self.markdownLineBreakMode = markdownLineBreakMode
+        self.showsFrontMatter = showsFrontMatter
         self.remoteContentPolicy = remoteContentPolicy
     }
 }

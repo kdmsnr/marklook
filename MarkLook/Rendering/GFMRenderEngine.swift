@@ -122,18 +122,24 @@ actor GFMRenderEngine: RenderEngine {
             }
             html += "</ol></section>"
         }
+        let frontMatterHTML: String
+        if context.showsFrontMatter, let frontMatter = processed.frontMatter {
+            frontMatterHTML = "<section class=\"front-matter\" aria-label=\"Front Matter\"><div class=\"front-matter-title\" aria-hidden=\"true\">Front Matter</div><pre><code class=\"language-yaml\">\(HTMLEscaping.text(frontMatter))</code></pre></section>"
+        } else {
+            frontMatterHTML = ""
+        }
         let extensionPostprocessing = postprocessingStartedAt.duration(to: clock.now)
 
         let htmlFragment: String
         let sanitizerTiming: HTMLSanitizerTiming
         if requiresFullSanitization {
             let sanitized = try sanitizer.sanitize(html, context: context)
-            htmlFragment = sanitized.fragment
+            htmlFragment = frontMatterHTML + sanitized.fragment
             resources = sanitized.resources
             warnings = sanitized.warnings
             sanitizerTiming = sanitized.timing
         } else {
-            htmlFragment = html
+            htmlFragment = frontMatterHTML + html
             sanitizerTiming = HTMLSanitizerTiming(
                 parsing: .zero,
                 transforming: .zero,

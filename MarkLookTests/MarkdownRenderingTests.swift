@@ -72,6 +72,59 @@ final class MarkdownRenderingTests: XCTestCase {
         XCTAssertEqual(output.timing.htmlParsing, .zero)
     }
 
+    func testFrontMatterCanBeShownAsEscapedYAMLAboveTheDocument() async throws {
+        let source = """
+        ---
+        danger: "</code></pre><script>alert(1)</script>"
+        image: "![metadata](metadata.png)"
+        equation: $metadata$
+        reference: [^metadata]
+        ---
+        # Body Heading
+        """
+
+        let output = try await render(source, showsFrontMatter: true)
+
+        XCTAssertTrue(
+            output.htmlFragment.contains("<section class=\"front-matter\" aria-label=\"Front Matter\">")
+        )
+        XCTAssertTrue(output.htmlFragment.contains("<code class=\"language-yaml\">"))
+        XCTAssertTrue(
+            output.htmlFragment.contains(
+                "danger: \"&lt;/code&gt;&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;\""
+            ),
+            output.htmlFragment
+        )
+        XCTAssertTrue(output.htmlFragment.contains("![metadata](metadata.png)"))
+        XCTAssertTrue(output.htmlFragment.contains("$metadata$"))
+        XCTAssertTrue(output.htmlFragment.contains("[^metadata]"))
+        XCTAssertFalse(output.htmlFragment.contains("<script"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("<img"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains(">Body Heading</h1>"), output.htmlFragment)
+        XCTAssertEqual(output.title, "Body Heading")
+        XCTAssertTrue(output.resources.isEmpty)
+        XCTAssertTrue(output.warnings.isEmpty)
+        XCTAssertFalse(output.containsMath)
+        XCTAssertEqual(output.timing.htmlParsing, .zero)
+    }
+
+    func testShownFrontMatterSurvivesSanitizationRequiredByTheBody() async throws {
+        let source = """
+        ---
+        title: Metadata
+        ---
+        <span onclick="alert(1)">Body</span>
+        """
+
+        let output = try await render(source, showsFrontMatter: true)
+
+        XCTAssertTrue(output.htmlFragment.contains("aria-label=\"Front Matter\""), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("title: Metadata"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains("<span>Body</span>"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("onclick"), output.htmlFragment)
+        XCTAssertNotEqual(output.timing.htmlParsing, .zero)
+    }
+
     func testGFMLineBreakModeKeepsSoftBreakAndRendersExplicitHardBreak() async throws {
         let source = "soft first\nsoft second\n\nhard first  \nhard second"
 
@@ -247,7 +300,8 @@ final class MarkdownRenderingTests: XCTestCase {
 
     private func render(
         _ source: String,
-        lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks
+        lineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        showsFrontMatter: Bool = false
     ) async throws -> RenderOutput {
         try await GFMRenderEngine().render(
             source: source,
@@ -256,7 +310,8 @@ final class MarkdownRenderingTests: XCTestCase {
                 documentURL: documentURL,
                 resourceAuthority: "markdown-rendering",
                 sizeClass: .full,
-                markdownLineBreakMode: lineBreakMode
+                markdownLineBreakMode: lineBreakMode,
+                showsFrontMatter: showsFrontMatter
             )
         )
     }

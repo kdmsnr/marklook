@@ -10,6 +10,8 @@ struct DocumentRootView: View {
     private var storedFontFamily = ViewerFontPreferences.defaultFontFamily.rawValue
     @AppStorage(MarkdownRenderingPreferences.lineBreakModeKey)
     private var storedMarkdownLineBreakMode = MarkdownRenderingPreferences.defaultLineBreakMode.rawValue
+    @AppStorage(MarkdownRenderingPreferences.showsFrontMatterKey)
+    private var showsFrontMatter = MarkdownRenderingPreferences.defaultShowsFrontMatter
     @AppStorage(RemoteContentPreferences.allowedHostsKey)
     private var storedRemoteContentHosts = RemoteContentPreferences.defaultStoredValue
     @State private var sessionOwner = DocumentSessionOwner()
@@ -80,6 +82,7 @@ struct DocumentRootView: View {
             session.setContentWidth(effectiveContentWidth)
             session.setFontFamily(fontFamily)
             session.setMarkdownLineBreakMode(markdownLineBreakMode)
+            session.setShowsFrontMatter(showsFrontMatter)
             session.setRemoteContentPolicy(remoteContentPolicy)
             session.start()
             currentURLDidChange(session.currentURL)
@@ -92,6 +95,9 @@ struct DocumentRootView: View {
         }
         .onChange(of: markdownLineBreakMode) { _, mode in
             session.setMarkdownLineBreakMode(mode)
+        }
+        .onChange(of: showsFrontMatter) { _, showsFrontMatter in
+            session.setShowsFrontMatter(showsFrontMatter)
         }
         .onChange(of: remoteContentPolicy) { _, policy in
             session.setRemoteContentPolicy(policy)

@@ -43,6 +43,7 @@ final class DocumentSession {
     @ObservationIgnored private var presentationGate = ReloadPresentationGate()
     @ObservationIgnored private var monitoringIssue: ViewerIssue?
     @ObservationIgnored private var markdownLineBreakMode: MarkdownLineBreakMode
+    @ObservationIgnored private var showsFrontMatter: Bool
     @ObservationIgnored private var remoteContentPolicy: RemoteContentPolicy
     @ObservationIgnored private var shouldOpenInCurrentWindow: ((URL, URL) -> Bool)?
 
@@ -52,6 +53,7 @@ final class DocumentSession {
         bookmarkStore: BookmarkStore = BookmarkStore(),
         recentDocuments: RecentDocuments = .shared,
         markdownLineBreakMode: MarkdownLineBreakMode = .gfmSoftBreaks,
+        showsFrontMatter: Bool = false,
         remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
         let rootURL = Self.normalizedDocumentURL(documentURL)
@@ -62,6 +64,7 @@ final class DocumentSession {
         self.bookmarkStore = bookmarkStore
         self.recentDocuments = recentDocuments
         self.markdownLineBreakMode = markdownLineBreakMode
+        self.showsFrontMatter = showsFrontMatter
         self.remoteContentPolicy = remoteContentPolicy
         rootDocumentURL = rootURL
         resourceAuthority = UUID().uuidString.lowercased()
@@ -137,6 +140,14 @@ final class DocumentSession {
     func setMarkdownLineBreakMode(_ mode: MarkdownLineBreakMode) {
         guard markdownLineBreakMode != mode else { return }
         markdownLineBreakMode = mode
+        if didStart {
+            configureReloadPipeline()
+        }
+    }
+
+    func setShowsFrontMatter(_ showsFrontMatter: Bool) {
+        guard self.showsFrontMatter != showsFrontMatter else { return }
+        self.showsFrontMatter = showsFrontMatter
         if didStart {
             configureReloadPipeline()
         }
@@ -288,6 +299,7 @@ final class DocumentSession {
         let renderer = self.renderer
         let contextAuthority = resourceAuthority
         let markdownLineBreakMode = self.markdownLineBreakMode
+        let showsFrontMatter = self.showsFrontMatter
         let remoteContentPolicy = self.remoteContentPolicy
         let scheduler = ReloadScheduler<PreparedDocument>(fileURL: url) { input in
             let clock = ContinuousClock()
@@ -307,6 +319,7 @@ final class DocumentSession {
                     resourceAuthority: contextAuthority,
                     sizeClass: sizeClass,
                     markdownLineBreakMode: markdownLineBreakMode,
+                    showsFrontMatter: showsFrontMatter,
                     remoteContentPolicy: remoteContentPolicy
                 )
             )

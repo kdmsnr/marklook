@@ -10,6 +10,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         let result = preprocessor.process(source)
 
         XCTAssertEqual(result.source, source)
+        XCTAssertNil(result.frontMatter)
         XCTAssertTrue(result.math.isEmpty)
         XCTAssertTrue(result.footnotes.isEmpty)
         XCTAssertTrue(result.footnoteReferences.isEmpty)
@@ -38,6 +39,10 @@ final class MarkupPreprocessorTests: XCTestCase {
         let result = preprocessor.process(source)
 
         XCTAssertEqual(result.source, "\n# Body\n")
+        XCTAssertEqual(
+            result.frontMatter,
+            "layout: page\ntitle: Document title\ntags:\n  - swift"
+        )
         XCTAssertTrue(result.math.isEmpty)
         XCTAssertTrue(result.footnotes.isEmpty)
         XCTAssertTrue(result.footnoteReferences.isEmpty)
@@ -49,17 +54,20 @@ final class MarkupPreprocessorTests: XCTestCase {
         let result = preprocessor.process(source)
 
         XCTAssertEqual(result.source, "Body\n")
+        XCTAssertEqual(result.frontMatter, "title: Document title")
     }
 
     func testEmptyFrontMatterAndWhitespaceAfterDelimitersAreSupported() {
-        let cases = [
-            ("---\n---\nBody", "Body"),
-            ("\u{FEFF}--- \t\ntitle: Ignored\n...\t\nBody", "Body"),
-            ("---\n---", ""),
+        let cases: [(source: String, body: String, frontMatter: String)] = [
+            ("---\n---\nBody", "Body", ""),
+            ("\u{FEFF}--- \t\ntitle: Ignored\n...\t\nBody", "Body", "title: Ignored"),
+            ("---\n---", "", ""),
         ]
 
-        for (source, expectedBody) in cases {
-            XCTAssertEqual(preprocessor.process(source).source, expectedBody)
+        for testCase in cases {
+            let result = preprocessor.process(testCase.source)
+            XCTAssertEqual(result.source, testCase.body)
+            XCTAssertEqual(result.frontMatter, testCase.frontMatter)
         }
     }
 
@@ -81,6 +89,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         XCTAssertEqual(result.footnotes.map(\.id), ["shown"])
         XCTAssertEqual(result.footnotes.map(\.source), ["Shown body note"])
         XCTAssertEqual(result.footnoteReferences.map(\.id), ["shown"])
+        XCTAssertNotNil(result.frontMatter)
         XCTAssertFalse(result.source.contains("metadata"), result.source)
         XCTAssertFalse(result.source.contains("hidden"), result.source)
     }
@@ -99,6 +108,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         let result = preprocessor.process(source)
 
         XCTAssertEqual(result.source, source)
+        XCTAssertNil(result.frontMatter)
     }
 
     func testFrontMatterSyntaxAwayFromDocumentStartRemainsMarkdown() {
@@ -107,6 +117,7 @@ final class MarkupPreprocessorTests: XCTestCase {
         let result = preprocessor.process(source)
 
         XCTAssertEqual(result.source, source)
+        XCTAssertNil(result.frontMatter)
     }
 
     func testSimilarOpeningDelimiterRemainsMarkdown() {
