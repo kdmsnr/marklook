@@ -32,6 +32,94 @@ final class MarkupPreprocessorTests: XCTestCase {
         XCTAssertTrue(result.footnoteReferences.isEmpty)
     }
 
+    func testLeadingYAMLFrontMatterIsRemovedBeforeMarkdownParsing() {
+        let source = "---\nlayout: page\ntitle: Document title\ntags:\n  - swift\n---\n\n# Body\n"
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, "\n# Body\n")
+        XCTAssertTrue(result.math.isEmpty)
+        XCTAssertTrue(result.footnotes.isEmpty)
+        XCTAssertTrue(result.footnoteReferences.isEmpty)
+    }
+
+    func testFrontMatterSupportsCRLFAndYAMLDocumentEndMarker() {
+        let source = "---\r\ntitle: Document title\r\n...\r\nBody\r\n"
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, "Body\n")
+    }
+
+    func testEmptyFrontMatterAndWhitespaceAfterDelimitersAreSupported() {
+        let cases = [
+            ("---\n---\nBody", "Body"),
+            ("\u{FEFF}--- \t\ntitle: Ignored\n...\t\nBody", "Body"),
+            ("---\n---", ""),
+        ]
+
+        for (source, expectedBody) in cases {
+            XCTAssertEqual(preprocessor.process(source).source, expectedBody)
+        }
+    }
+
+    func testFrontMatterExtensionsAreIgnoredButBodyExtensionsStillWork() {
+        let source = """
+        ---
+        equation: $metadata$
+        reference: [^hidden]
+        [^hidden]: Hidden metadata note
+        ---
+        Body $visible$[^shown].
+
+        [^shown]: Shown body note
+        """
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.math.map(\.source), ["visible"])
+        XCTAssertEqual(result.footnotes.map(\.id), ["shown"])
+        XCTAssertEqual(result.footnotes.map(\.source), ["Shown body note"])
+        XCTAssertEqual(result.footnoteReferences.map(\.id), ["shown"])
+        XCTAssertFalse(result.source.contains("metadata"), result.source)
+        XCTAssertFalse(result.source.contains("hidden"), result.source)
+    }
+
+    func testIndentedDelimiterInsideFrontMatterDoesNotCloseIt() {
+        let source = "---\ndescription: |\n  ---\n  retained as YAML\n---\nBody"
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, "Body")
+    }
+
+    func testUnterminatedFrontMatterCandidateRemainsMarkdown() {
+        let source = "---\ntitle: Not front matter\n# Body"
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, source)
+    }
+
+    func testFrontMatterSyntaxAwayFromDocumentStartRemainsMarkdown() {
+        let source = "# Start\n\n---\ntitle: Ordinary Markdown\n---\n"
+
+        let result = preprocessor.process(source)
+
+        XCTAssertEqual(result.source, source)
+    }
+
+    func testSimilarOpeningDelimiterRemainsMarkdown() {
+        let cases = [
+            "----\ntitle: Four dashes\n---",
+            " ---\ntitle: Indented\n---",
+        ]
+
+        for source in cases {
+            XCTAssertEqual(preprocessor.process(source).source, source)
+        }
+    }
+
     func testASCIIMathMarkerAfterMultibyteTextIsDetected() {
         let result = preprocessor.process("日本語と絵文字🧮の後に $α + β$ を表示")
 

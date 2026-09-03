@@ -1,6 +1,8 @@
 import Foundation
 
 struct MarkupPreprocessor: Sendable {
+    private let frontMatter = MarkdownFrontMatter()
+
     struct MathReplacement: Sendable {
         let token: String
         let source: String
@@ -26,10 +28,12 @@ struct MarkupPreprocessor: Sendable {
 
     func process(_ input: String) -> Result {
         let markers = scanMarkers(in: input)
+        let startsWithFrontMatter = input.hasPrefix("---") || input.hasPrefix("\u{FEFF}---")
 
-        // Most documents do not use MarkLook extensions. Scan the UTF-8 bytes once so this path
-        // can return the original copy-on-write String without normalizing or allocating storage.
-        guard markers.hasCarriageReturn || markers.hasExtension else {
+        // Most documents use neither MarkLook extensions nor front matter. Scan the UTF-8 bytes
+        // once so this path can return the original copy-on-write String without normalizing or
+        // allocating storage.
+        guard markers.hasCarriageReturn || markers.hasExtension || startsWithFrontMatter else {
             return Result(
                 source: input,
                 math: [],
@@ -47,9 +51,16 @@ struct MarkupPreprocessor: Sendable {
             normalized = input
         }
 
-        guard markers.hasExtension else {
+        let frontMatterExtraction = startsWithFrontMatter
+            ? frontMatter.extract(from: normalized)
+            : .init(body: normalized, found: false)
+        let markdownSource = frontMatterExtraction.body
+        let hasExtension = markers.hasExtension
+            && (!frontMatterExtraction.found || scanMarkers(in: markdownSource).hasExtension)
+
+        guard hasExtension else {
             return Result(
-                source: normalized,
+                source: markdownSource,
                 math: [],
                 footnotes: [],
                 footnoteReferences: []
@@ -57,7 +68,7 @@ struct MarkupPreprocessor: Sendable {
         }
 
         let prefix = "MARKLOOK_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))_"
-        let extracted = extractFootnotes(from: normalized)
+        let extracted = extractFootnotes(from: markdownSource)
         let footnoteIDs = Set(extracted.footnotes.map(\.id))
 
         var math: [MathReplacement] = []

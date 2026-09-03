@@ -25,6 +25,53 @@ final class MarkdownRenderingTests: XCTestCase {
         )
     }
 
+    func testLeadingYAMLFrontMatterIsExcludedFromRenderedMarkdown() async throws {
+        let source = """
+        ---
+        layout: page
+        title: Front Matter Title
+        tags:
+          - swift
+          - markdown
+        ---
+
+        # Body Heading
+
+        Body text.
+        """
+
+        let output = try await render(source)
+
+        XCTAssertFalse(output.htmlFragment.contains("layout"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("Front Matter Title"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("<hr>"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("<h2"), output.htmlFragment)
+        XCTAssertTrue(output.htmlFragment.contains(">Body Heading</h1>"), output.htmlFragment)
+        XCTAssertEqual(output.title, "Body Heading")
+    }
+
+    func testFrontMatterCannotTriggerExtensionsResourcesOrSanitization() async throws {
+        let source = """
+        ---
+        script: <script>alert(1)</script>
+        image: "![metadata](metadata.png)"
+        equation: $metadata$
+        reference: [^metadata]
+        ---
+        Plain body.
+        """
+
+        let output = try await render(source)
+
+        XCTAssertTrue(output.htmlFragment.contains(">Plain body.</p>"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("metadata"), output.htmlFragment)
+        XCTAssertFalse(output.htmlFragment.contains("<script"), output.htmlFragment)
+        XCTAssertTrue(output.resources.isEmpty)
+        XCTAssertTrue(output.warnings.isEmpty)
+        XCTAssertFalse(output.containsMath)
+        XCTAssertEqual(output.timing.htmlParsing, .zero)
+    }
+
     func testGFMLineBreakModeKeepsSoftBreakAndRendersExplicitHardBreak() async throws {
         let source = "soft first\nsoft second\n\nhard first  \nhard second"
 
