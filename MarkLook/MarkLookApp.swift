@@ -26,20 +26,28 @@ struct MarkLookApp: App {
 private struct ViewerWindowRoot: View {
     @Binding var route: ViewerWindowRoute
     @Environment(\.openWindow) private var openWindow
+    @State private var sessionOwner = DocumentSessionOwner()
 
     var body: some View {
+        let documentURL = route.documentURL
+        let session = documentURL.map { sessionOwner.session(for: $0) }
+
         Group {
-            switch route {
-            case let .document(url):
+            if let documentURL, let session {
                 DocumentRootView(
-                    documentURL: url,
+                    documentURL: documentURL,
+                    session: session,
                     currentURLDidChange: updateDocumentRoute
                 )
-            case .welcome:
+            } else {
                 WelcomeDropView(route: $route)
             }
         }
         .navigationTitle(route.windowTitle)
+        // Install the same toolbar before a Welcome window opens its first document.
+        .toolbar {
+            ViewerToolbar(session: session)
+        }
         .background(WindowTabRegistrationView(route: $route))
         .onAppear {
             WindowOpenRouter.shared.install { destination in
