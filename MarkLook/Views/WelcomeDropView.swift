@@ -19,7 +19,7 @@ struct WelcomeDropView: View {
                     .accessibilityHidden(true)
 
                 VStack(spacing: 7) {
-                    Text("Open a Markdown or HTML file")
+                    Text("Open a Markdown, HTML, CSV, or TSV file")
                         .font(.title2.weight(.semibold))
                     Text("Drop a file here, or choose one from your Mac.")
                         .foregroundStyle(.secondary)

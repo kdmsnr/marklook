@@ -26,6 +26,7 @@
     resolveExclusiveLayoutChangeIdle: null,
     mathCache: new Map(),
     highlightCache: new Map(),
+    tableSort: null,
   };
 
   const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
@@ -146,6 +147,7 @@
     applyFontFamily(state.fontFamily, state.fontFamilyRevision);
 
     state.content.addEventListener("click", handleFragmentLinkClick);
+    state.content.addEventListener("click", handleTableSortClick);
 
     for (const eventName of ["wheel", "mousedown", "keydown", "touchstart"]) {
       window.addEventListener(eventName, event => {
@@ -159,6 +161,7 @@
 
   function captureScroll() {
     const scrollElement = document.scrollingElement || document.documentElement;
+    const tableViewport = state.content.querySelector(".delimited-viewport");
     const maximum = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
     const candidates = [...state.content.querySelectorAll("[data-marklook-anchor]")];
     let anchor = null;
@@ -177,7 +180,67 @@
       ratio: maximum > 0 ? scrollElement.scrollTop / maximum : 0,
       atBottom: maximum - scrollElement.scrollTop <= 24,
       fragment: location.hash ? decodeURIComponent(location.hash.slice(1)) : null,
+      tableScrollTop: tableViewport?.scrollTop ?? null,
+      tableScrollLeft: tableViewport?.scrollLeft ?? null,
     };
+  }
+
+  function applyTableSort(sort) {
+    const table = state.content.querySelector(".delimited-table");
+    const body = table?.tBodies[0];
+    if (!body) return;
+    const buttons = [...table.querySelectorAll("thead .delimited-sort")];
+    if (sort && !buttons.some(button => Number(button.dataset.marklookColumn) === sort.column)) {
+      state.tableSort = null;
+      sort = null;
+    }
+    const rows = [...body.rows].sort((left, right) =>
+      Number(left.dataset.marklookRow) - Number(right.dataset.marklookRow)
+    );
+    // Missing trailing columns are represented by one spanning, empty cell.
+    const values = rows.map(row => sort ? row.cells[sort.column + 1]?.textContent ?? "" : "");
+    const indices = globalThis.marklookTableSort.orderedIndices(values, sort?.direction);
+    const fragment = document.createDocumentFragment();
+    for (const index of indices) fragment.append(rows[index]);
+    body.append(fragment);
+    for (const button of buttons) {
+      const direction = sort?.column === Number(button.dataset.marklookColumn) ? sort.direction : "none";
+      button.closest("th").setAttribute("aria-sort", direction);
+      button.title = direction === "ascending"
+        ? "Sort descending"
+        : direction === "descending" ? "Restore file order" : "Sort ascending";
+    }
+  }
+
+  function handleTableSortClick(event) {
+    const button = event.composedPath().find(node =>
+      node instanceof HTMLButtonElement && node.matches(".delimited-sort")
+    );
+    if (!button) return;
+    const column = Number(button.dataset.marklookColumn);
+    if (!Number.isInteger(column) || column < 0) return;
+    event.preventDefault();
+    void sortTableColumn(column);
+  }
+
+  async function sortTableColumn(column) {
+    const generation = state.generation;
+    await beginExclusiveLayoutChange();
+    try {
+      if (state.generation !== generation) return;
+      state.interactionVersion += 1;
+      state.layoutVersion += 1;
+      state.tableSort = globalThis.marklookTableSort.nextSort(state.tableSort, column);
+      const viewport = state.content.querySelector(".delimited-viewport");
+      const left = viewport?.scrollLeft ?? 0;
+      applyTableSort(state.tableSort);
+      if (viewport) {
+        viewport.scrollTop = 0;
+        viewport.scrollLeft = left;
+      }
+    } finally {
+      endExclusiveLayoutChange();
+    }
   }
 
   function captureCalloutDisclosureState() {
@@ -343,6 +406,11 @@
 
   function restoreScroll(snapshot, explicitAnchor) {
     const scrollElement = document.scrollingElement || document.documentElement;
+    const tableViewport = state.content.querySelector(".delimited-viewport");
+    if (tableViewport) {
+      tableViewport.scrollTop = snapshot.tableScrollTop || 0;
+      tableViewport.scrollLeft = snapshot.tableScrollLeft || 0;
+    }
     const requested = elementForAnchor(explicitAnchor);
     if (requested) {
       requested.scrollIntoView({ block: "start" });
@@ -412,7 +480,11 @@
             state.requestedFontFamilyRevision
           );
         }
+        // Restore source order before positional diffing, then sort the updated records again.
+        if (state.tableSort) applyTableSort(null);
+        if (!preserveScroll) state.tableSort = null;
         patchContent(argumentsObject.html || "", Boolean(argumentsObject.useFineDiff));
+        if (state.tableSort) applyTableSort(state.tableSort);
         state.content.classList.toggle("marklook-lightweight", !argumentsObject.useFineDiff);
         const warnings = argumentsObject.containsMath ? renderMath() : [];
         highlightCode(Boolean(argumentsObject.highlight));

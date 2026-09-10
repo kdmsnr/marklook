@@ -19,6 +19,8 @@ struct PersistedScrollState: Codable, Sendable {
     let ratio: Double
     let atBottom: Bool
     let fragment: String?
+    let tableScrollTop: Double?
+    let tableScrollLeft: Double?
 }
 
 @MainActor
@@ -115,6 +117,7 @@ final class WebViewStore: NSObject {
         highlightCSS = lightHighlightCSS + "\n@media screen and (prefers-color-scheme: dark) {\n\(darkHighlightCSS)\n}"
 
         let runtime = Self.asset(named: "ViewerRuntime", extension: "js") ?? ""
+        let tableSort = Self.asset(named: "DelimitedTableSort", extension: "js") ?? ""
         let katex = Self.asset(named: "katex.min", extension: "js") ?? ""
         let highlighter = Self.asset(named: "highlight.min", extension: "js") ?? ""
 
@@ -138,7 +141,7 @@ final class WebViewStore: NSObject {
         )
         let userContentController = WKUserContentController()
         let userScript = WKUserScript(
-            source: [katex, highlighter, runtime].joined(separator: "\n;\n"),
+            source: [katex, highlighter, tableSort, runtime].joined(separator: "\n;\n"),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true,
             in: Self.contentWorld
@@ -243,7 +246,9 @@ final class WebViewStore: NSObject {
             offset: dictionary["offset"] as? Double ?? 0,
             ratio: dictionary["ratio"] as? Double ?? 0,
             atBottom: dictionary["atBottom"] as? Bool ?? false,
-            fragment: dictionary["fragment"] as? String
+            fragment: dictionary["fragment"] as? String,
+            tableScrollTop: dictionary["tableScrollTop"] as? Double,
+            tableScrollLeft: dictionary["tableScrollLeft"] as? Double
         )
     }
 
@@ -257,6 +262,8 @@ final class WebViewStore: NSObject {
                     "ratio": state.ratio,
                     "atBottom": state.atBottom,
                     "fragment": state.fragment as Any,
+                    "tableScrollTop": state.tableScrollTop as Any,
+                    "tableScrollLeft": state.tableScrollLeft as Any,
                 ]
             ],
             contentWorld: Self.contentWorld

@@ -17,6 +17,12 @@ actor GFMRenderEngine: RenderEngine {
                 return try renderMarkdown(source, context: context)
             case .html:
                 return try renderHTML(source, context: context)
+            case .csv, .tsv:
+                return try DelimitedTextRenderer().render(
+                    source,
+                    delimiter: format == .csv ? "," : "\t",
+                    context: context
+                )
             }
         } catch let error as DocumentLoadError {
             throw error

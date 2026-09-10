@@ -117,6 +117,7 @@
 				Resources/ThirdParty/KaTeX/katex.min.css,
 				Resources/ThirdParty/KaTeX/katex.min.js,
 				Resources/Web/Viewer.css,
+				Resources/Web/DelimitedTableSort.js,
 				Resources/Web/ViewerRuntime.js,
 			);
 			target = 100000000000000000000001 /* MarkLook */;

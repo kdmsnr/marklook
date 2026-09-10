@@ -11,7 +11,7 @@ enum DocumentOpenPanel {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.markLookMarkdown, .html]
+        panel.allowedContentTypes = [.markLookMarkdown, .html, .commaSeparatedText, .tabSeparatedText]
         panel.prompt = "Open"
 
         let handler: (NSApplication.ModalResponse) -> Void = { response in

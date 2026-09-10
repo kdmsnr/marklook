@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 enum DocumentFormat: String, Sendable, Codable {
     case markdown
     case html
+    case csv
+    case tsv
 
     init(url: URL) throws {
         switch url.pathExtension.lowercased() {
@@ -11,6 +13,10 @@ enum DocumentFormat: String, Sendable, Codable {
             self = .markdown
         case "html", "htm":
             self = .html
+        case "csv":
+            self = .csv
+        case "tsv":
+            self = .tsv
         default:
             throw DocumentLoadError.unsupportedType(url.pathExtension)
         }

@@ -182,6 +182,97 @@ th, td { border: 1px solid var(--border); padding: 7px 12px; }
 th { background: var(--surface); font-weight: 600; }
 tr:nth-child(even) { background: color-mix(in srgb, var(--surface) 55%, transparent); }
 
+#document-content:has(> .delimited-document) {
+  display: flex;
+  height: 100vh;
+  max-width: none;
+  padding: 18px 20px 20px;
+}
+.delimited-document { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.delimited-summary {
+  align-items: baseline;
+  color: var(--secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8em;
+  gap: 4px 20px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.delimited-viewport {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+}
+.delimited-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.delimited-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  display: table;
+  font-size: 0.875em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  margin: 0;
+  max-width: none;
+  min-width: 100%;
+  overflow: visible;
+  text-align: start;
+}
+.delimited-table :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 9px 14px;
+  vertical-align: top;
+}
+.delimited-table tr > :last-child { border-right: 0; }
+.delimited-table tbody tr:last-child > * { border-bottom: 0; }
+.delimited-table thead th { background: var(--surface); position: sticky; top: 0; z-index: 2; }
+.delimited-table thead th:has(.delimited-sort) { padding: 0; }
+.delimited-sort {
+  align-items: baseline;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 14px;
+  text-align: inherit;
+  width: 100%;
+}
+.delimited-sort:hover { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.delimited-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.delimited-sort-indicator { color: var(--secondary); flex: none; }
+.delimited-sort-indicator::after { content: "↕"; }
+.delimited-table th[aria-sort="ascending"] .delimited-sort-indicator::after { content: "↑"; }
+.delimited-table th[aria-sort="descending"] .delimited-sort-indicator::after { content: "↓"; }
+.delimited-table th:is([aria-sort="ascending"], [aria-sort="descending"]) { color: var(--accent); }
+.delimited-table .delimited-row-number {
+  background: var(--surface);
+  color: var(--secondary);
+  font-size: 0.85em;
+  font-weight: 400;
+  left: 0;
+  min-width: 3.5em;
+  position: sticky;
+  text-align: end;
+  width: 1%;
+  z-index: 1;
+}
+.delimited-table thead .delimited-row-number { z-index: 3; }
+.delimited-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.delimited-cell { min-width: 5em; max-width: 36em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.delimited-placeholder { color: var(--secondary); font-weight: 400; }
+.delimited-empty { color: var(--secondary); margin: auto; }
+
 img, video { height: auto; max-width: 100%; }
 img { border-radius: 4px; }
 hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
@@ -213,6 +304,15 @@ input[type="checkbox"] {
   pre { overflow-wrap: anywhere; white-space: pre-wrap; }
   table { display: table; overflow: visible; width: 100%; }
   thead { display: table-header-group; }
+  #document-content:has(> .delimited-document) { display: block; height: auto; min-height: 0; padding: 0; }
+  .delimited-document { display: block; }
+  .delimited-viewport { border: 0; border-radius: 0; overflow: visible; }
+  .delimited-table { min-width: 0; table-layout: fixed; }
+  .delimited-table :is(th, td) { padding: 4px 6px; }
+  .delimited-table thead th, .delimited-table .delimited-row-number { position: static; }
+  .delimited-cell { min-width: 0; max-width: none; }
+  .delimited-sort { cursor: default; gap: 4px; padding: 4px 6px; }
+  .delimited-table th[aria-sort="none"] .delimited-sort-indicator { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
