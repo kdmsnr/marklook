@@ -114,9 +114,8 @@ struct SecureHTMLFormatter: MarkupWalker {
         // Paragraphs inside list items already carry the stable scroll anchor required by the
         // restoration contract, so hashing the entire item a second time is redundant.
         result += "<li>"
-        if let checkbox = listItem.checkbox {
-            let checked = checkbox == .checked ? " checked" : ""
-            result += "<input type=\"checkbox\" disabled\(checked) aria-label=\"Task\"> "
+        if let checkbox = listItem.checkbox, !(listItem.child(at: 0) is Paragraph) {
+            renderCheckbox(checkbox)
         }
         descendInto(listItem)
         result += "</li>\n"
@@ -138,6 +137,13 @@ struct SecureHTMLFormatter: MarkupWalker {
     mutating func visitParagraph(_ paragraph: Paragraph) {
         let anchor = uniqueHashedAnchor(prefix: "paragraph", markup: paragraph)
         result += "<p data-marklook-anchor=\"\(anchor)\">"
+        // Keep the checkbox in the first paragraph so the task text shares its line.
+        if paragraph.indexInParent == 0,
+           let listItem = paragraph.parent as? ListItem,
+           let checkbox = listItem.checkbox
+        {
+            renderCheckbox(checkbox)
+        }
         descendInto(paragraph)
         result += "</p>\n"
     }
@@ -273,6 +279,11 @@ struct SecureHTMLFormatter: MarkupWalker {
         if let destination = symbolLink.destination {
             result += "<code>\(HTMLEscaping.text(destination))</code>"
         }
+    }
+
+    private mutating func renderCheckbox(_ checkbox: Checkbox) {
+        let checked = checkbox == .checked ? " checked" : ""
+        result += "<input type=\"checkbox\" disabled\(checked) aria-label=\"Task\"> "
     }
 
     private mutating func printInline(tag: String, content: Markup) {
