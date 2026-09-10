@@ -26,7 +26,7 @@ struct DelimitedTextRenderer {
             let prefix = parsed.isTruncated ? "Preview · " : ""
             html += "<div class=\"delimited-summary\">\(prefix)\(rowCount) \(rowCount == 1 ? "row" : "rows") · \(columnCount) \(columnCount == 1 ? "column" : "columns")<span>First row is the header · Click a column to sort</span></div>"
             html += "<div class=\"delimited-viewport\" role=\"region\" aria-label=\"Scrollable table\" tabindex=\"0\">"
-            html += "<table class=\"delimited-table\" aria-label=\"\(HTMLEscaping.attribute(context.documentURL.lastPathComponent))\"><thead><tr><th class=\"delimited-row-number\" scope=\"col\" aria-label=\"Row number\">#</th>"
+            html += "<table class=\"delimited-table\" aria-label=\"\(HTMLEscaping.attribute(context.documentURL.lastPathComponent))\"><thead><tr><th class=\"delimited-row-number\" scope=\"col\" aria-sort=\"none\"><button type=\"button\" class=\"delimited-sort\" data-marklook-column=\"-1\" aria-label=\"Row number\" title=\"Sort ascending\"><span>#</span><span class=\"delimited-sort-indicator\" aria-hidden=\"true\"></span></button></th>"
             for column in 0..<columnCount {
                 let title = column < header.count ? header[column] : ""
                 let content = title.isEmpty

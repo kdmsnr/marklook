@@ -19,6 +19,11 @@
     return null;
   }
 
+  function isSortableColumn(column) {
+    // -1 selects the original row number; data columns start at zero.
+    return Number.isInteger(column) && column >= -1;
+  }
+
   // This module handles values and indices only; it never reads or operates a UI.
   function orderedIndices(values, direction) {
     const entries = values.map((value, index) => {
@@ -42,5 +47,5 @@
     return entries.map(entry => entry.index);
   }
 
-  globalThis.marklookTableSort = Object.freeze({ nextSort, orderedIndices });
+  globalThis.marklookTableSort = Object.freeze({ nextSort, orderedIndices, isSortableColumn });
 })();

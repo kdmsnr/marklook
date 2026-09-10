@@ -197,7 +197,8 @@
     const rows = [...body.rows].sort((left, right) =>
       Number(left.dataset.marklookRow) - Number(right.dataset.marklookRow)
     );
-    // Missing trailing columns are represented by one spanning, empty cell.
+    // Column -1 uses cells[0], the original row number. Missing trailing data
+    // columns are represented by one spanning, empty cell.
     const values = rows.map(row => sort ? row.cells[sort.column + 1]?.textContent ?? "" : "");
     const indices = globalThis.marklookTableSort.orderedIndices(values, sort?.direction);
     const fragment = document.createDocumentFragment();
@@ -218,7 +219,7 @@
     );
     if (!button) return;
     const column = Number(button.dataset.marklookColumn);
-    if (!Number.isInteger(column) || column < 0) return;
+    if (!globalThis.marklookTableSort.isSortableColumn(column)) return;
     event.preventDefault();
     void sortTableColumn(column);
   }

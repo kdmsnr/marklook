@@ -128,13 +128,24 @@ final class DelimitedTextTests: XCTestCase {
         let output = try await render("<Name>,\nC,2,extra\nA,1")
         let document = try SwiftSoup.parseBodyFragment(output.htmlFragment)
         let buttons = try document.select("thead button.delimited-sort").array()
-        XCTAssertEqual(buttons.count, 3)
-        XCTAssertEqual(try buttons.map { try $0.attr("data-marklook-column") }, ["0", "1", "2"])
-        XCTAssertEqual(try buttons.first?.text(), "<Name>")
+        XCTAssertEqual(buttons.count, 4)
+        XCTAssertEqual(try buttons.map { try $0.attr("data-marklook-column") }, ["-1", "0", "1", "2"])
+        XCTAssertEqual(try buttons.first?.text(), "#")
+        XCTAssertEqual(try buttons.first?.attr("aria-label"), "Row number")
+        XCTAssertEqual(try buttons[1].text(), "<Name>")
         XCTAssertTrue(try buttons.allSatisfy { try $0.attr("type") == "button" })
-        XCTAssertEqual(try document.select("thead th[aria-sort=none]").count, 3)
+        XCTAssertEqual(try document.select("thead th[aria-sort=none]").count, 4)
         XCTAssertEqual(try document.select("tbody tr").array().map { try $0.attr("data-marklook-row") }, ["0", "1"])
         XCTAssertEqual(try document.select("tbody th[scope=row]").array().map { try $0.text() }, ["1", "2"])
+    }
+
+    func testCSVIdentifierColumnHasItsOwnSortControl() async throws {
+        let output = try await render("id,name\n10,C\n2,B\n1,A")
+        let document = try SwiftSoup.parseBodyFragment(output.htmlFragment)
+        let idButton = try document.select("button[data-marklook-column=0]")
+        XCTAssertEqual(try idButton.text(), "id")
+        XCTAssertEqual(try document.select("tbody td:first-of-type .delimited-cell").array().map { try $0.text() }, ["10", "2", "1"])
+        XCTAssertEqual(try document.select("tbody th[scope=row]").array().map { try $0.text() }, ["1", "2", "3"])
     }
 
     private func render(_ source: String, format: DocumentFormat = .csv) async throws -> RenderOutput {

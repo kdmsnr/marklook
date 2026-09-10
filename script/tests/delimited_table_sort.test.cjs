@@ -75,6 +75,26 @@ test("the same column cycles ascending, descending, and source order", () => {
   assert.equal(different.direction, "ascending");
 });
 
+test("the original row number column is sortable and switches away from a data column", () => {
+  assert.equal(sorting.isSortableColumn(-1), true);
+  assert.equal(sorting.isSortableColumn(0), true);
+  for (const invalid of [-2, 0.5, NaN, undefined]) {
+    assert.equal(sorting.isSortableColumn(invalid), false);
+  }
+  const first = sorting.nextSort({ column: 0, direction: "descending" }, -1);
+  assert.equal(first.column, -1);
+  assert.equal(first.direction, "ascending");
+  const second = sorting.nextSort(first, -1);
+  assert.equal(second.direction, "descending");
+  assert.equal(sorting.nextSort(second, -1), null);
+});
+
+test("row numbers and zero-padded identifiers sort numerically without changing values", () => {
+  assert.deepEqual(sorted(["10", "2", "1"]), ["1", "2", "10"]);
+  assert.deepEqual(sorted(["10", "2", "1"], "descending"), ["10", "2", "1"]);
+  assert.deepEqual(sorted(["010", "002", "001"]), ["001", "002", "010"]);
+});
+
 test("empty input and entirely empty columns retain their order", () => {
   assert.deepEqual(sorted([]), []);
   assert.deepEqual(sorted(["", " ", null], "descending"), ["", " ", null]);
