@@ -69,6 +69,12 @@ private final class MarkLookAppDelegate: NSObject, NSApplicationDelegate {
         WindowOpenRouter.shared.enqueueExternalOpen(urls)
     }
 
+    // The native tab bar uses an AppKit action, separate from the SwiftUI New Tab command.
+    @objc func newWindowForTab(_ sender: Any?) {
+        let sourceWindow = (sender as? NSWindow) ?? (sender as? NSView)?.window
+        WindowOpenRouter.shared.openNewTab(from: sourceWindow)
+    }
+
     func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         !flag
     }

@@ -5,6 +5,14 @@ import XCTest
 
 @MainActor
 final class WindowTabCoordinatorTests: XCTestCase {
+    func testApplicationDelegateHandlesNativeNewTabAction() {
+        let action = #selector(NSResponder.newWindowForTab(_:))
+        XCTAssertTrue(
+            NSApp.delegate?.responds(to: action) == true
+        )
+        XCTAssertNotNil(NSApp.target(forAction: action))
+    }
+
     func testOpenPanelIsNotSelectedAsTabParent() {
         let documentWindow = NSWindow()
         let openPanel = NSOpenPanel()
