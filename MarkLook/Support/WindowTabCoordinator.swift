@@ -242,6 +242,7 @@ enum WindowTabCoordinator {
     @discardableResult
     private static func attach(_ window: NSWindow, to parent: NSWindow) -> Bool {
         inheritFrame(from: parent, to: window)
+        window.level = parent.level
         let alreadyTabbedTogether = parent.tabGroup != nil
             && parent.tabGroup === window.tabGroup
         if !alreadyTabbedTogether {

@@ -28,6 +28,7 @@ extension FocusedValues {
 
 struct ViewerCommands: Commands {
     @FocusedValue(\.viewerActions) private var actions
+    @StateObject private var windowLevel = ViewerWindowLevelController()
     let recentDocuments: RecentDocuments
 
     var body: some Commands {
@@ -86,6 +87,16 @@ struct ViewerCommands: Commands {
                 WindowTabCoordinator.closeSelectedTab()
             }
             .keyboardShortcut("w", modifiers: .command)
+        }
+
+        CommandGroup(after: .windowArrangement) {
+            Divider()
+
+            Toggle("Always on Top", isOn: Binding(
+                get: { windowLevel.isAlwaysOnTop },
+                set: { windowLevel.setAlwaysOnTop($0) }
+            ))
+            .disabled(!windowLevel.canToggle)
         }
 
         CommandMenu("Viewer") {
