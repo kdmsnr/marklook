@@ -46,7 +46,19 @@ xcodebuild \
 
 変更内容に応じて対象のテストクラスを置き換えてください。
 UI テストと GUI の自動操作による検証は禁止しています。実行前に、対象の単体テストが GUI や入力環境に影響しないことを確認してください。
-対象を限定しない `xcodebuild test` は UI テストも実行するため使用しません。作業ルールとビルドのみの手順は [AGENTS.md](AGENTS.md) を参照してください。
+対象を限定しない `xcodebuild test` は UI テストも実行するため使用しません。
+
+アプリを起動せずにビルドする場合：
+
+```sh
+xcodebuild \
+  -project MarkLook.xcodeproj \
+  -scheme MarkLook \
+  -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData \
+  build
+```
 
 ## License
 
