@@ -7,14 +7,18 @@ final class ViewerWindowLevelController: NSObject, ObservableObject {
     @Published private(set) var canToggle = false
     @Published private(set) var isAlwaysOnTop = false
 
+    private weak var targetWindow: NSWindow?
     private weak var observedTabGroup: NSWindowTabGroup?
     private var tabObservation: NSKeyValueObservation?
+    private let menuUpdates = MenuUpdateScheduler()
 
     override init() {
         super.init()
         for name in [
             NSWindow.didBecomeKeyNotification,
             NSWindow.didResignKeyNotification,
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didResignMainNotification,
             NSWindow.willCloseNotification,
             NSWindow.willBeginSheetNotification,
             NSWindow.didEndSheetNotification,
@@ -34,13 +38,18 @@ final class ViewerWindowLevelController: NSObject, ObservableObject {
     }
 
     func setAlwaysOnTop(_ enabled: Bool) {
-        guard let window = activeViewerWindow else { return }
+        // Keep the action aimed at the viewer that supplied the menu state, even
+        // when a menu's search field temporarily becomes the key window.
+        guard let window = targetWindow,
+              window.isVisible,
+              window.attachedSheet == nil,
+              NSApp.modalWindow == nil else { return }
         setLevel(enabled ? .floating : .normal, for: window)
-        refresh()
+        scheduleRefresh()
     }
 
     private var activeViewerWindow: NSWindow? {
-        guard let window = NSApp?.keyWindow,
+        guard let window = NSApp?.keyWindow ?? NSApp?.mainWindow,
               !(window is NSPanel),
               window.tabbingIdentifier == WindowTabCoordinator.sharedTabbingIdentifier,
               window.attachedSheet == nil,
@@ -49,14 +58,18 @@ final class ViewerWindowLevelController: NSObject, ObservableObject {
     }
 
     @objc private func windowDidChange(_: Notification) {
-        // AppKit may still be updating key-window and tab ownership during a notification.
-        Task { @MainActor [weak self] in
+        scheduleRefresh()
+    }
+
+    private func scheduleRefresh() {
+        menuUpdates.schedule { [weak self] in
             self?.refresh()
         }
     }
 
     private func refresh() {
         let window = activeViewerWindow
+        targetWindow = window
         let group = window?.tabGroup
         if observedTabGroup !== group {
             tabObservation = nil
@@ -64,21 +77,25 @@ final class ViewerWindowLevelController: NSObject, ObservableObject {
             // `windows` is KVO compliant, including native tab merges and detachments.
             tabObservation = group?.observe(\.windows) { [weak self] _, _ in
                 Task { @MainActor [weak self] in
-                    self?.refresh()
+                    self?.scheduleRefresh()
                 }
             }
         }
 
-        canToggle = window != nil
+        if canToggle != (window != nil) {
+            canToggle = window != nil
+        }
         guard let window else {
-            isAlwaysOnTop = false
+            if isAlwaysOnTop { isAlwaysOnTop = false }
             return
         }
 
         // Preserve pinning when a new tab or another window joins a pinned group.
         let enabled = (group?.windows ?? [window]).contains { $0.level == .floating }
         setLevel(enabled ? .floating : .normal, for: window)
-        isAlwaysOnTop = enabled
+        if isAlwaysOnTop != enabled {
+            isAlwaysOnTop = enabled
+        }
     }
 
     private func setLevel(_ level: NSWindow.Level, for window: NSWindow) {

@@ -24,7 +24,6 @@ final class DocumentSession {
     @ObservationIgnored private let renderer: any RenderEngine
     @ObservationIgnored private let bookmarkStore: BookmarkStore
     @ObservationIgnored private let recentDocuments: RecentDocuments
-    @ObservationIgnored private let rootDocumentURL: URL
     @ObservationIgnored private var scopes: [LocalResourceScope]
     @ObservationIgnored private var leases: [SecurityScopedLease]
     @ObservationIgnored private var scheduler: ReloadScheduler<PreparedDocument>?
@@ -32,7 +31,7 @@ final class DocumentSession {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var spinnerTask: Task<Void, Never>?
     @ObservationIgnored private var activityToken = UUID()
-    @ObservationIgnored private var pendingNavigationSource: String?
+    @ObservationIgnored private var pendingNavigationRequest: WebNavigationRequest?
     @ObservationIgnored private var backHistory: [URL] = []
     @ObservationIgnored private var forwardHistory: [URL] = []
     @ObservationIgnored private let resourceAuthority: String
@@ -56,9 +55,10 @@ final class DocumentSession {
         showsFrontMatter: Bool = false,
         remoteContentPolicy: RemoteContentPolicy = .init()
     ) {
-        let rootURL = Self.normalizedDocumentURL(documentURL)
-        let restoredNavigation = Self.persistedNavigation(for: rootURL)
-        let initialURL = restoredNavigation?.currentURL ?? rootURL
+        // An explicit file open must always display that file, even if older saved
+        // navigation state associates it with a different document.
+        let initialURL = Self.normalizedDocumentURL(documentURL)
+        let restoredNavigation = DocumentNavigationState.restore(for: initialURL)
         currentURL = initialURL
         self.renderer = renderer
         self.bookmarkStore = bookmarkStore
@@ -66,13 +66,12 @@ final class DocumentSession {
         self.markdownLineBreakMode = markdownLineBreakMode
         self.showsFrontMatter = showsFrontMatter
         self.remoteContentPolicy = remoteContentPolicy
-        rootDocumentURL = rootURL
         resourceAuthority = UUID().uuidString.lowercased()
         backHistory = restoredNavigation?.backHistory ?? []
         forwardHistory = restoredNavigation?.forwardHistory ?? []
 
         let restored = bookmarkStore.resolveAll()
-        let directURLs = Set([rootURL, initialURL].map(Self.fileAccessURL))
+        let directURLs = [Self.fileAccessURL(initialURL)]
         leases = Self.deduplicatedLeases(
             restored.leases + directURLs.map(SecurityScopedLease.init(url:))
         )
@@ -94,10 +93,7 @@ final class DocumentSession {
         webViewStore.onNavigationFailure = { [weak self] message in
             self?.showOverlay(kind: .rendering, title: "Display Error", message: message)
         }
-        try? bookmarkStore.save(Self.fileAccessURL(rootURL), asFolder: false)
-        if initialURL.path != rootURL.path {
-            try? bookmarkStore.save(Self.fileAccessURL(initialURL), asFolder: false)
-        }
+        try? bookmarkStore.save(Self.fileAccessURL(initialURL), asFolder: false)
         updateHistoryFlags()
     }
 
@@ -486,7 +482,7 @@ final class DocumentSession {
                 openFile(target, recordingHistory: true)
             }
         } catch LocalPathValidationError.outsideAllowedScopes {
-            pendingNavigationSource = request.source
+            pendingNavigationRequest = request
             showOverlay(
                 kind: .permission,
                 title: "Folder Access Required",
@@ -551,9 +547,9 @@ final class DocumentSession {
             retainAccess(to: folder, asFolder: true)
             webViewStore.updateAccess(documentURL: currentURL, scopes: scopes)
             issue = nil
-            if let pendingNavigationSource {
-                self.pendingNavigationSource = nil
-                handleNavigation(.init(source: pendingNavigationSource, openInNewTab: false))
+            if let pendingNavigationRequest {
+                self.pendingNavigationRequest = nil
+                handleNavigation(pendingNavigationRequest)
             } else if documentWatcher == nil {
                 // A file-scoped sandbox grant may allow reading the document while denying the
                 // parent-directory descriptor used for atomic-save monitoring. Retry the whole
@@ -661,20 +657,11 @@ final class DocumentSession {
     }
 
     private func persistNavigation() {
-        let state = PersistedNavigationState(
+        DocumentNavigationState(
             currentURL: currentURL,
             backHistory: backHistory,
             forwardHistory: forwardHistory
-        )
-        guard let data = try? PropertyListEncoder().encode(state) else { return }
-        UserDefaults.standard.set(data, forKey: Self.navigationKey(for: rootDocumentURL))
-        UserDefaults.standard.set(data, forKey: Self.navigationKey(for: currentURL))
-    }
-
-    private struct PersistedNavigationState: Codable {
-        let currentURL: URL
-        let backHistory: [URL]
-        let forwardHistory: [URL]
+        ).save()
     }
 
     private static func normalizedDocumentURL(_ url: URL) -> URL {
@@ -717,32 +704,8 @@ final class DocumentSession {
         }
     }
 
-    private static func persistedNavigation(for rootURL: URL) -> PersistedNavigationState? {
-        guard let data = UserDefaults.standard.data(forKey: navigationKey(for: rootURL)),
-              let decoded = try? PropertyListDecoder().decode(PersistedNavigationState.self, from: data),
-              isSupportedDocumentURL(decoded.currentURL)
-        else { return nil }
-        return PersistedNavigationState(
-            currentURL: normalizedDocumentURL(decoded.currentURL),
-            backHistory: decoded.backHistory
-                .filter(isSupportedDocumentURL)
-                .map(normalizedDocumentURL),
-            forwardHistory: decoded.forwardHistory
-                .filter(isSupportedDocumentURL)
-                .map(normalizedDocumentURL)
-        )
-    }
-
     private static func isSupportedDocumentURL(_ url: URL) -> Bool {
         url.isFileURL && (try? DocumentFormat(url: url)) != nil
-    }
-
-    private static func navigationKey(for url: URL) -> String {
-        let digest = SHA256.hash(data: Data(url.standardizedFileURL.path.utf8))
-            .prefix(10)
-            .map { String(format: "%02x", $0) }
-            .joined()
-        return "DocumentNavigation.\(digest)"
     }
 
     private static func zoomKey(for url: URL) -> String {

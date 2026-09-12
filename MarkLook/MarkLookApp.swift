@@ -18,7 +18,10 @@ struct MarkLookApp: App {
         .defaultSize(width: 900, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
-            ViewerCommands(recentDocuments: .shared)
+            ViewerCommands(
+                recentDocuments: .shared,
+                windowLevel: appDelegate.windowLevel
+            )
         }
     }
 }
@@ -65,6 +68,8 @@ private struct ViewerWindowRoot: View {
 
 @MainActor
 private final class MarkLookAppDelegate: NSObject, NSApplicationDelegate {
+    let windowLevel = ViewerWindowLevelController()
+
     func applicationWillFinishLaunching(_: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = true
     }
