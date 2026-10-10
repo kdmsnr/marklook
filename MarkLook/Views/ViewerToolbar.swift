@@ -3,10 +3,18 @@ import SwiftUI
 /// A stable toolbar for every viewer window, including an empty Welcome tab.
 struct ViewerToolbar: ToolbarContent {
     let session: DocumentSession?
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let warnings: [RenderWarning]
     @State private var warningsArePresented = false
 
-    private var warnings: [RenderWarning] {
-        session?.warnings ?? []
+    // Construct this value in the owning View's body so Observation tracks these
+    // reads there, rather than relying on ToolbarContent to observe the session.
+    init(session: DocumentSession?) {
+        self.session = session
+        canGoBack = session?.canGoBack == true
+        canGoForward = session?.canGoForward == true
+        warnings = session?.warnings ?? []
     }
 
     var body: some ToolbarContent {
@@ -16,7 +24,7 @@ struct ViewerToolbar: ToolbarContent {
             }
             .labelStyle(.iconOnly)
             .help("Back")
-            .disabled(session?.canGoBack != true)
+            .disabled(!canGoBack)
             .accessibilityIdentifier("viewer.back")
 
             Button("Forward", systemImage: "chevron.right") {
@@ -24,7 +32,7 @@ struct ViewerToolbar: ToolbarContent {
             }
             .labelStyle(.iconOnly)
             .help("Forward")
-            .disabled(session?.canGoForward != true)
+            .disabled(!canGoForward)
             .accessibilityIdentifier("viewer.forward")
         }
 

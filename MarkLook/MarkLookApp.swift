@@ -34,6 +34,7 @@ private struct ViewerWindowRoot: View {
     var body: some View {
         let documentURL = route.documentURL
         let session = documentURL.map { sessionOwner.session(for: $0) }
+        let viewerToolbar = ViewerToolbar(session: session)
 
         Group {
             if let documentURL, let session {
@@ -49,7 +50,7 @@ private struct ViewerWindowRoot: View {
         .navigationTitle(route.windowTitle)
         // Install the same toolbar before a Welcome window opens its first document.
         .toolbar {
-            ViewerToolbar(session: session)
+            viewerToolbar
         }
         .background(WindowTabRegistrationView(route: $route))
         .onAppear {
