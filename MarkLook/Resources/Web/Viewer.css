@@ -160,8 +160,10 @@ pre {
   border-radius: 8px;
   line-height: 1.45;
   overflow: auto;
+  overflow-wrap: anywhere;
   padding: 16px;
   tab-size: 4;
+  white-space: pre-wrap;
 }
 pre code { background: transparent; border-radius: 0; font-size: 0.85em; padding: 0; }
 
@@ -301,7 +303,6 @@ input[type="checkbox"] {
   details.callout > summary.callout-title::-webkit-details-marker { display: none; }
   h1, h2, h3, h4, h5, h6 { break-after: avoid-page; }
   blockquote, details.callout, figure, img, pre, tr { break-inside: avoid-page; }
-  pre { overflow-wrap: anywhere; white-space: pre-wrap; }
   table { display: table; overflow: visible; width: 100%; }
   thead { display: table-header-group; }
   #document-content:has(> .delimited-document) { display: block; height: auto; min-height: 0; padding: 0; }
