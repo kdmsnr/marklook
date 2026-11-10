@@ -82,6 +82,7 @@ enum WindowTabCoordinator {
         route: ViewerWindowRoute
     ) {
         window.title = route.windowTitle
+        window.tab.title = route.tabTitle
         window.representedURL = route.documentURL.map(ViewerWindowRoute.fileAccessURL)
     }
 

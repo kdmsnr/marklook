@@ -48,7 +48,7 @@ xcodebuild \
 UI テストと GUI の自動操作による検証は禁止しています。実行前に、対象の単体テストが GUI や入力環境に影響しないことを確認してください。
 対象を限定しない `xcodebuild test` は UI テストも実行するため使用しません。
 
-アプリを起動せずにビルドする場合：
+アプリを起動せずにビルドし、`build/MarkLook.app` に配置する場合（既存のアプリは置き換えます）：
 
 ```sh
 xcodebuild \
@@ -57,7 +57,16 @@ xcodebuild \
   -configuration Debug \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath .build/DerivedData \
-  build
+  build &&
+mkdir -p build &&
+(
+  set -e
+  stage_dir=$(mktemp -d build/.marklook-stage.XXXXXX)
+  trap 'rm -rf "$stage_dir"' EXIT
+  ditto .build/DerivedData/Build/Products/Debug/MarkLook.app "$stage_dir/MarkLook.app"
+  rm -rf build/MarkLook.app
+  mv "$stage_dir/MarkLook.app" build/MarkLook.app
+)
 ```
 
 ## License

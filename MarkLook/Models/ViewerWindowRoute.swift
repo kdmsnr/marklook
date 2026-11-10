@@ -22,6 +22,20 @@ enum ViewerWindowRoute: Hashable, Codable {
     var windowTitle: String {
         switch self {
         case .welcome:
+            return "MarkLook"
+        case let .document(url):
+            let components = url.pathComponents.filter { $0 != "/" }
+            if components.count > 3 {
+                return "…/" + components.suffix(3).joined(separator: "/")
+            } else {
+                return url.path
+            }
+        }
+    }
+
+    var tabTitle: String {
+        switch self {
+        case .welcome:
             "MarkLook"
         case let .document(url):
             url.lastPathComponent

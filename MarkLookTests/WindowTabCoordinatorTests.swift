@@ -104,6 +104,17 @@ final class WindowTabCoordinatorTests: XCTestCase {
         )
     }
 
+    func testWindowTitleShortensLongPaths() {
+        let long = ViewerWindowRoute.viewing(
+            URL(fileURLWithPath: "/Users/example/プロジェクト/docs/TODO.md")
+        )!
+        let short = ViewerWindowRoute.viewing(URL(fileURLWithPath: "/tmp/TODO.md"))!
+
+        XCTAssertEqual(long.windowTitle, "…/プロジェクト/docs/TODO.md")
+        XCTAssertEqual(short.windowTitle, "/tmp/TODO.md")
+        XCTAssertEqual(long.tabTitle, "TODO.md")
+    }
+
     func testDocumentTabUsesTheFileName() {
         let route = ViewerWindowRoute.viewing(
             URL(string: "file:///tmp/a%20folder/README.md#installation")!
@@ -112,8 +123,9 @@ final class WindowTabCoordinatorTests: XCTestCase {
 
         WindowTabCoordinator.configureWindowMetadata(for: window, route: route)
 
-        XCTAssertEqual(route.windowTitle, "README.md")
-        XCTAssertEqual(window.title, "README.md")
+        XCTAssertEqual(route.windowTitle, "/tmp/a folder/README.md")
+        XCTAssertEqual(window.title, "/tmp/a folder/README.md")
+        XCTAssertEqual(window.tab.title, "README.md")
         XCTAssertEqual(window.representedURL?.path, "/tmp/a folder/README.md")
         XCTAssertNil(window.representedURL?.fragment)
     }
